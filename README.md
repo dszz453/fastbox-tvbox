@@ -53,16 +53,40 @@ docker run -d \
   --name fastbox-search \
   --restart unless-stopped \
   -p 8088:8088 \
+  -v fastbox-data:/app/data \
   -e DEFAULT_HOME=douban \
   -e SEARCH_TIMEOUT=3.0 \
   zhangxiaonan1986/fastbox-tvbox:latest
 ```
+
+> **务必保留 `-v fastbox-data:/app/data`**：网页里保存的配置（网盘密钥、pansou-edge 地址、
+> PanCheck 地址、性能参数）都持久化在 `/app/data`。不挂载卷的话，容器重建后配置会丢失。
+
+| 项目 | 值 |
+|---|---|
+| 镜像 | `zhangxiaonan1986/fastbox-tvbox:latest` |
+| 架构 | `linux/amd64` / `linux/arm64`（自动匹配） |
+| 基础镜像 | `python:3.11-slim` |
+| 数据卷 | `/app/data`（网页配置持久化目录） |
 
 ### 方式三：一键推送到 Docker Hub (专属脚本)
 
 在当前项目根目录下：
 - **Windows**：直接双击 `push-to-dockerhub.bat`，即可全自动登录、构建并推送到 `zhangxiaonan1986/fastbox-tvbox:latest`；
 - **Linux**：执行 `bash push-to-dockerhub.sh`。
+
+> 脚本不会保存任何密钥。请先设置环境变量 `DOCKERHUB_TOKEN`，或运行 `python auto_push.py` 时按提示输入
+> （输入不回显）。Token 在 Docker Hub → Account Settings → Security 生成，用完可随时吊销。
+
+### 方式四：云端自动构建（无需本地 Docker，支持双架构）
+
+仓库内置了 GitHub Actions 工作流 `.github/workflows/docker-publish.yml`：
+
+- 推送到 `main` 分支、打 `v*.*.*` 标签、或在 Actions 页面手动 `Run workflow` 都会触发；
+- 自动构建 `linux/amd64` + `linux/arm64` 双架构并发布到 Docker Hub；
+- 前置条件：在仓库 **Settings → Secrets and variables → Actions** 中添加 `DOCKERHUB_TOKEN`。
+
+这是**虚拟机用户**（宿主未开嵌套虚拟化、本地 Docker 无法启动）的推荐方案，详见 [DEPLOY-GUIDE.md](./DEPLOY-GUIDE.md)。
 
 启动完成后，打开浏览器访问：`http://<你的服务器IP>:8088` 即可进入现代化 Web 管理与搜索控制台！
 
