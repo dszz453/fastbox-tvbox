@@ -10,7 +10,8 @@ from app.routers.tvbox import router as tvbox_router
 from app.routers.vod import router as vod_router
 from app.routers.douban_api import router as douban_router
 from app.routers.search import router as search_router
-from app.routers.token_api import router as token_router
+from app.routers.token_api import router as token_router, apply_env_tokens
+from app.routers.config_api import router as config_router
 
 app = FastAPI(
     title=config.APP_NAME,
@@ -40,6 +41,7 @@ app.include_router(vod_router)
 app.include_router(douban_router)
 app.include_router(search_router)
 app.include_router(token_router)
+app.include_router(config_router)
 
 @app.get("/", response_class=HTMLResponse)
 async def index_page(request: Request):
@@ -50,6 +52,15 @@ async def index_page(request: Request):
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "app": config.APP_NAME}
+
+
+@app.on_event("startup")
+async def _startup():
+    """启动时把环境变量中的网盘密钥写入 tokenm.json"""
+    try:
+        apply_env_tokens()
+    except Exception as e:
+        print(f"[Startup] apply_env_tokens failed: {e}")
 
 if __name__ == "__main__":
     import uvicorn

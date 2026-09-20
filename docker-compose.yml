@@ -13,13 +13,64 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PORT=8088
-      - SEARCH_TIMEOUT=3.0
+
+      # ============ 首页与体验 ============
+      # douban(豆瓣热播首页) | lite(极速纯搜) | full(全能离线套件)
       - DEFAULT_HOME=douban
+      - ENABLE_IMG_PROXY=true
+      - ENABLE_DANMU=true
+
+      # ============ 搜索性能 ============
+      # 单源超时熔断(秒)：越小响应越快，推荐 2.5~3.5
+      - SEARCH_TIMEOUT=3.0
+      - MAX_CONCURRENCY=20
+      - CACHE_TTL_SEARCH=1800
+      - CACHE_TTL_DOUBAN=7200
+
+      # ============ ① pansou-edge 网盘聚合搜索（可选） ============
+      # 填写你自建的 Cloudflare Worker 地址，留空则用内置公开节点
+      # 也可以在网页「系统设置」里填写，网页配置优先级更高
+      - ENABLE_PANSOU_EDGE=true
+      - PANSOU_EDGE_URL=
+      - PANSOU_EDGE_TOKEN=
+      - PANSOU_EDGE_TIMEOUT=4.0
+
+      # ============ ② PanCheck 网盘死链检测（可选） ============
+      # 自建 PanCheck 服务地址，例如 http://192.168.1.10:8774
+      # 检测模式: auto | remote | local | off
+      - PANCHECK_MODE=auto
+      - PANCHECK_URL=
+      - PANCHECK_TIMEOUT=1.5
+      - PANCHECK_BATCH_SIZE=30
+
+      # ============ ③ 网盘播放密钥（可选，推荐用网页扫码配置） ============
+      # 推荐打开网页 http://<IP>:8088 → 「网盘密钥」标签页扫码授权，
+      # 无需在此填写。若想用环境变量预置，可取消下面的注释：
+      # - ALI_OPEN_TOKEN=
+      # - QUARK_COOKIE=
+      # - UC_COOKIE=
+      # - YD_AUTH=
+      # - THUNDER_USERNAME=
+      # - THUNDER_PASSWORD=
+      # - PIKPAK_USERNAME=
+      # - PIKPAK_PASSWORD=
+      - VOD_FLAGS=4kz|auto
+
     volumes:
+      # 静态资源（含 pg.jar 离线爬虫套件）—— 挂载后可随时替换升级
       - ./static:/app/static
+      # 网页端保存的配置（pansou-edge / PanCheck / 性能参数）—— 必须挂载，否则重启丢失
+      - ./data:/app/data
+
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:8088/health\")'"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8088/health')\""]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

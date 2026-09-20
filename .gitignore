@@ -9,7 +9,12 @@ venv/
 _sysinfo*.txt
 push_progress.log
 docker_status.json
+poster_test.jpg
+server.log
 *.log
+
+# ---- 运行时数据（用户自己的网页配置，不入库） ----
+data/
 
 # ---- 打包产物 ----
 fastbox-docker.zip

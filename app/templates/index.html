@@ -1,699 +1,760 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastBox - TVBox 智能极速聚合搜索与豆瓣订阅服务</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📺</text></svg>">
-    <!-- 二维码生成库 -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <style>
-        :root {
-            --bg-color: #0d1117;
-            --card-bg: #161b22;
-            --border-color: #30363d;
-            --text-main: #f0f6fc;
-            --text-muted: #8b949e;
-            --accent: #238636;
-            --accent-hover: #2ea043;
-            --primary: #58a6ff;
-            --primary-hover: #388bfd;
-            --tag-bg: #21262d;
-            --badge-douban: #00b51d;
-            --badge-pan: #e3b341;
-            --badge-collector: #a371f7;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FastBox - TVBox 极速聚合搜索与豆瓣订阅服务</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📺</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#0d1117; --card:#161b22; --card2:#0d1117; --border:#30363d;
+  --text:#f0f6fc; --muted:#8b949e; --accent:#238636; --accent-h:#2ea043;
+  --primary:#58a6ff; --primary-h:#388bfd; --tag:#21262d;
+  --ok:#3fb950; --warn:#d29922; --err:#f85149;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);line-height:1.6;padding-bottom:70px;
+     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.container{max-width:1120px;margin:0 auto;padding:0 20px}
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
+header{background:rgba(22,27,34,.88);backdrop-filter:blur(12px);
+       border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;padding:14px 0}
+.header-content{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.logo-box{display:flex;align-items:center;gap:12px}
+.logo-icon{font-size:27px}
+.logo-title{font-size:19px;font-weight:700;letter-spacing:-.4px}
+.logo-tag{font-size:11px;padding:2px 8px;background:rgba(35,134,54,.2);color:var(--ok);
+          border:1px solid rgba(63,185,80,.3);border-radius:20px;font-weight:600;margin-left:8px}
+.nav-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.nav-tab{background:transparent;border:1px solid transparent;color:var(--muted);
+         padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:.2s}
+.nav-tab:hover{color:var(--text);background:var(--tag)}
+.nav-tab.active{background:rgba(88,166,255,.15);color:var(--primary);border-color:rgba(88,166,255,.4)}
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            line-height: 1.6;
-            padding-bottom: 60px;
-        }
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+      padding:22px;margin-top:20px;box-shadow:0 4px 20px rgba(0,0,0,.25)}
+.card-header{display:flex;justify-content:space-between;align-items:center;
+             margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px}
+.card-title{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card-sub{font-size:12px;color:var(--muted);font-weight:400}
 
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 0 20px;
-        }
+.config-box{display:grid;grid-template-columns:1fr 190px;gap:22px;align-items:center}
+@media(max-width:820px){.config-box{grid-template-columns:1fr}}
+.home-selector{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.selector-btn{background:var(--tag);border:1px solid var(--border);color:var(--muted);
+              padding:8px 15px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:.2s}
+.selector-btn:hover{border-color:var(--primary);color:var(--primary)}
+.selector-btn.active{background:rgba(88,166,255,.15);color:var(--primary);border-color:var(--primary)}
+.url-display-box{display:flex;gap:8px;background:var(--card2);padding:6px;border-radius:8px;border:1px solid var(--border)}
+.url-input{flex:1;background:transparent;border:none;color:#7ee787;padding:8px 12px;
+           font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;outline:none;min-width:0}
+.btn{background:var(--accent);color:#fff;border:none;padding:9px 18px;border-radius:7px;
+     cursor:pointer;font-weight:600;font-size:13px;transition:.2s;white-space:nowrap;display:inline-flex;
+     align-items:center;gap:6px}
+.btn:hover{background:var(--accent-h)}
+.btn-primary{background:var(--primary)}
+.btn-primary:hover{background:var(--primary-h)}
+.btn-ghost{background:var(--tag);border:1px solid var(--border);color:var(--text)}
+.btn-ghost:hover{border-color:var(--primary);color:var(--primary);background:var(--tag)}
+.btn-sm{padding:6px 12px;font-size:12px}
+.qr-wrapper{display:flex;flex-direction:column;align-items:center;justify-content:center;
+            background:#fff;padding:11px;border-radius:8px;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.qr-tip{font-size:11px;color:#333;margin-top:6px;font-weight:500}
 
-        /* 顶部导航 */
-        header {
-            background-color: rgba(22, 27, 34, 0.85);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid var(--border-color);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            padding: 16px 0;
-        }
+.search-area{display:flex;gap:10px;margin-bottom:14px}
+.search-input{flex:1;background:var(--card2);border:1px solid var(--border);border-radius:8px;
+              padding:12px 16px;color:var(--text);font-size:14px;outline:none;transition:.2s;width:100%}
+.search-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(88,166,255,.18)}
+.hot-keywords{display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.keyword-tag{background:var(--tag);border:1px solid var(--border);padding:4px 10px;
+             border-radius:6px;color:var(--text);cursor:pointer;transition:.2s;font-size:12px}
+.keyword-tag:hover{border-color:var(--primary);color:var(--primary)}
+.results-container{margin-top:18px;display:flex;flex-direction:column;gap:14px}
+.film-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;
+           padding:16px;display:flex;flex-direction:column;gap:10px}
+.film-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.film-title{font-size:17px;font-weight:600;color:var(--primary);display:flex;align-items:center;gap:8px}
+.film-meta{font-size:12px;color:var(--muted);white-space:nowrap}
+.source-group{border-top:1px dashed var(--border);padding-top:9px}
+.source-title{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:7px;
+              display:flex;align-items:center;gap:6px}
+.ep-list{display:flex;flex-wrap:wrap;gap:7px}
+.ep-item{background:var(--tag);border:1px solid var(--border);padding:5px 11px;border-radius:6px;
+         font-size:12px;color:var(--text);text-decoration:none;transition:.2s;cursor:pointer}
+.ep-item:hover{background:var(--primary);border-color:var(--primary);color:#fff}
 
-        .header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:500}
+.field .hint{font-size:11px;color:#6e7681;margin-top:5px;line-height:1.5}
+.field input[type=text],.field input[type=password],.field select,.field textarea{
+  width:100%;background:var(--card2);border:1px solid var(--border);border-radius:7px;
+  padding:9px 12px;color:var(--text);font-size:13px;outline:none;transition:.2s;font-family:inherit}
+.field textarea{min-height:78px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--primary)}
+.field select{cursor:pointer}
+.row-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.test-result{font-size:12px;padding:8px 12px;border-radius:7px;margin-top:10px;display:none;line-height:1.6}
+.test-result.show{display:block}
+.test-result.ok{background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.35);color:var(--ok)}
+.test-result.err{background:rgba(248,81,73,.12);border:1px solid rgba(248,81,73,.35);color:var(--err)}
 
-        .logo-box {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
+.pan-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.pan-item{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:16px;
+          display:flex;flex-direction:column;gap:11px}
+.pan-head{display:flex;justify-content:space-between;align-items:center}
+.pan-name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:7px}
+.pan-badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600}
+.pan-badge.on{background:rgba(63,185,80,.18);color:var(--ok);border:1px solid rgba(63,185,80,.35)}
+.pan-badge.off{background:rgba(139,148,158,.14);color:var(--muted);border:1px solid var(--border)}
+.pan-badge.qr{background:rgba(88,166,255,.15);color:var(--primary);border:1px solid rgba(88,166,255,.35)}
 
-        .logo-icon {
-            font-size: 28px;
-        }
+.modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;
+            align-items:center;justify-content:center;z-index:999;padding:20px}
+.modal-mask.show{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
+       padding:24px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.modal h3{font-size:17px;margin-bottom:6px}
+.modal p{font-size:13px;color:var(--muted);margin-bottom:16px}
+.modal .qr-holder{background:#fff;padding:14px;border-radius:10px;
+                  display:flex;align-items:center;justify-content:center;min-height:190px}
+.modal .status{text-align:center;font-size:13px;margin-top:14px;min-height:22px;font-weight:500}
+.modal .modal-actions{display:flex;gap:10px;margin-top:16px}
 
-        .logo-title {
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-            color: var(--text-main);
-        }
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--accent);
+       color:#fff;padding:10px 24px;border-radius:20px;font-size:13px;font-weight:600;
+       opacity:0;pointer-events:none;transition:opacity .3s;z-index:1000;box-shadow:0 4px 15px rgba(0,0,0,.4)}
+.toast.show{opacity:1}
+.toast.err{background:var(--err)}
 
-        .logo-tag {
-            font-size: 11px;
-            padding: 2px 8px;
-            background: rgba(35, 134, 54, 0.2);
-            color: #3fb950;
-            border: 1px solid rgba(63, 185, 80, 0.3);
-            border-radius: 20px;
-            font-weight: 600;
-        }
-
-        /* 主要卡片样式 */
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 24px;
-            margin-top: 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .card-title {
-            font-size: 17px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        /* TVBox 配置卡片 */
-        .config-box {
-            display: grid;
-            grid-template-columns: 1fr 200px;
-            gap: 24px;
-            align-items: center;
-        }
-
-        @media (max-width: 768px) {
-            .config-box {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        .home-selector {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-        }
-
-        .selector-btn {
-            background: var(--tag-bg);
-            border: 1px solid var(--border-color);
-            color: var(--text-muted);
-            padding: 8px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 500;
-            transition: all 0.2s;
-        }
-
-        .selector-btn.active {
-            background: rgba(88, 166, 255, 0.15);
-            color: var(--primary);
-            border-color: var(--primary);
-        }
-
-        .url-display-box {
-            display: flex;
-            gap: 8px;
-            background: #0d1117;
-            padding: 6px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-        }
-
-        .url-input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: #7ee787;
-            padding: 8px 12px;
-            font-family: monospace;
-            font-size: 14px;
-            outline: none;
-        }
-
-        .copy-btn {
-            background: var(--accent);
-            color: white;
-            border: none;
-            padding: 8px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 13px;
-            transition: background 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .copy-btn:hover {
-            background: var(--accent-hover);
-        }
-
-        .qr-wrapper {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: #ffffff;
-            padding: 12px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }
-
-        .qr-tip {
-            font-size: 11px;
-            color: #333;
-            margin-top: 6px;
-            font-weight: 500;
-        }
-
-        /* 搜索框部分 */
-        .search-area {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .search-input {
-            flex: 1;
-            background: #0d1117;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px 18px;
-            color: var(--text-main);
-            font-size: 15px;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .search-input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
-        }
-
-        .search-btn {
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 0 28px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 15px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .search-btn:hover {
-            background: var(--primary-hover);
-        }
-
-        .hot-keywords {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-wrap: wrap;
-            font-size: 13px;
-            color: var(--text-muted);
-        }
-
-        .keyword-tag {
-            background: var(--tag-bg);
-            border: 1px solid var(--border-color);
-            padding: 4px 10px;
-            border-radius: 6px;
-            color: var(--text-main);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .keyword-tag:hover {
-            border-color: var(--primary);
-            color: var(--primary);
-        }
-
-        /* 搜索结果 */
-        .results-container {
-            margin-top: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
-
-        .film-card {
-            background: #0d1117;
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            padding: 18px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .film-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-        }
-
-        .film-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--primary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .film-meta {
-            font-size: 13px;
-            color: var(--text-muted);
-        }
-
-        .source-group {
-            border-top: 1px dashed var(--border-color);
-            padding-top: 10px;
-        }
-
-        .source-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .ep-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .ep-item {
-            background: var(--tag-bg);
-            border: 1px solid var(--border-color);
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            color: var(--text-main);
-            text-decoration: none;
-            transition: all 0.2s;
-            cursor: pointer;
-        }
-
-        .ep-item:hover {
-            background: var(--primary);
-            border-color: var(--primary);
-            color: #fff;
-        }
-
-        /* 状态说明与特性卡片 */
-        .features-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-            margin-top: 24px;
-        }
-
-        .feature-item {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 10px;
-            padding: 16px;
-        }
-
-        .feature-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-main);
-            margin-bottom: 6px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .feature-desc {
-            font-size: 12px;
-            color: var(--text-muted);
-        }
-
-        .toast {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #238636;
-            color: white;
-            padding: 10px 24px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s;
-            z-index: 1000;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-        }
-
-        .toast.show {
-            opacity: 1;
-        }
-    </style>
+.section-hide{display:none}
+.footer{text-align:center;color:#6e7681;font-size:12px;padding:30px 0 10px}
+</style>
 </head>
 <body>
 
-    <!-- 顶部导航 -->
-    <header>
-        <div class="container header-content">
-            <div class="logo-box">
-                <span class="logo-icon">📺</span>
-                <div>
-                    <span class="logo-title">FastBox 智能服务</span>
-                    <span class="logo-tag">Docker 极速版</span>
-                </div>
-            </div>
-            <div style="font-size: 12px; color: var(--text-muted);">
-                PanCheck 探活过滤 · 毫秒并发搜索 · 豆瓣首页
-            </div>
+<header>
+  <div class="container header-content">
+    <div class="logo-box">
+      <span class="logo-icon">📺</span>
+      <div><span class="logo-title">FastBox</span><span class="logo-tag">Docker 极速版</span></div>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="switchTab('main',this)">🏠 首页</button>
+      <button class="nav-tab" onclick="switchTab('pan',this)">🔑 网盘密钥</button>
+      <button class="nav-tab" onclick="switchTab('settings',this)">⚙️ 系统设置</button>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ============ 首页 ============ -->
+  <div id="tab-main">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>📡</span> TVBox / 影视仓 一键配置</div>
+        <div style="font-size:12px;color:var(--ok)">● 订阅服务在线</div>
+      </div>
+      <div class="config-box">
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">
+            选择首页模式（链接自动适配当前访问的 IP / 域名）：
+          </div>
+          <div class="home-selector">
+            <button class="selector-btn active" onclick="setMode('douban',this)">🌟 豆瓣热播首页</button>
+            <button class="selector-btn" onclick="setMode('lite',this)">⚡ 极速纯搜版</button>
+            <button class="selector-btn" onclick="setMode('full',this)">📦 全能套件版</button>
+          </div>
+          <div class="url-display-box">
+            <input type="text" id="configUrlInput" class="url-input" readonly>
+            <button class="btn" onclick="copyConfigUrl()"><span>📋</span> 复制</button>
+          </div>
+          <div style="margin-top:12px;font-size:12px;color:var(--muted);line-height:1.9">
+            💡 <b>使用方法：</b>打开电视上的 TVBox / 影视仓 → <b>设置 ➔ 配置地址</b> →
+            填入上方链接，或直接用手机扫描右侧二维码快速推送！
+          </div>
         </div>
-    </header>
-
-    <div class="container">
-
-        <!-- TVBox 配置卡片 -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">
-                    <span>📡</span> TVBox / 影视仓 一键配置中心
-                </div>
-                <div style="font-size: 12px; color: #7ee787;">● 订阅服务在线就绪</div>
-            </div>
-
-            <div class="config-box">
-                <div>
-                    <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 8px;">
-                        选择 TVBox 首页展示模式 (自动适配当前服务器 IP 与域名)：
-                    </div>
-                    <div class="home-selector">
-                        <button class="selector-btn active" onclick="setMode('douban')">🌟 豆瓣热播首页 (推荐)</button>
-                        <button class="selector-btn" onclick="setMode('lite')">⚡ 极速聚合纯搜版</button>
-                        <button class="selector-btn" onclick="setMode('full')">📦 全能离线套件版</button>
-                    </div>
-
-                    <div class="url-display-box">
-                        <input type="text" id="configUrlInput" class="url-input" readonly value="">
-                        <button class="copy-btn" onclick="copyConfigUrl()">
-                            <span>📋</span> 复制配置链接
-                        </button>
-                    </div>
-
-                    <div style="margin-top: 12px; font-size: 12px; color: var(--text-muted); line-height: 1.8;">
-                        💡 <b>TVBox 使用方法：</b><br>
-                        1. 打开电视上的 <b>TVBox / 影视仓 / 猫影视</b> 客户端。<br>
-                        2. 进入 <b>设置 ➔ 配置地址 (接口地址)</b>。<br>
-                        3. 手机/遥控器输入上方复制的链接，或直接使用手机微信/浏览器扫描右侧二维码快速推送！
-                    </div>
-                </div>
-
-                <!-- 二维码 -->
-                <div class="qr-wrapper">
-                    <div id="qrcode"></div>
-                    <div class="qr-tip">电视/手机扫码直接导入</div>
-                </div>
-            </div>
+        <div class="qr-wrapper">
+          <div id="qrcode"></div>
+          <div class="qr-tip">扫码导入电视</div>
         </div>
-
-        <!-- 全网多源极速搜索体验 -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title">
-                    <span>⚡</span> 全网多源极速搜索 (毫秒响应 · 自动探活)
-                </div>
-                <div id="searchSpeed" style="font-size: 12px; color: var(--primary);"></div>
-            </div>
-
-            <div class="search-area">
-                <input type="text" id="searchInput" class="search-input" placeholder="输入影视名称，例如：抓娃娃、庆余年、黑神话、繁花..." onkeydown="if(event.key==='Enter') doSearch()">
-                <button class="search-btn" onclick="doSearch()">极速搜索</button>
-            </div>
-
-            <div class="hot-keywords">
-                <span>🔥 热门推荐:</span>
-                <span class="keyword-tag" onclick="quickSearch('抓娃娃')">抓娃娃</span>
-                <span class="keyword-tag" onclick="quickSearch('庆余年')">庆余年</span>
-                <span class="keyword-tag" onclick="quickSearch('繁花')">繁花</span>
-                <span class="keyword-tag" onclick="quickSearch('三体')">三体</span>
-                <span class="keyword-tag" onclick="quickSearch('第二十条')">第二十条</span>
-                <span class="keyword-tag" onclick="quickSearch('年会不能停')">年会不能停</span>
-            </div>
-
-            <!-- 搜索结果渲染区 -->
-            <div id="resultsBox" class="results-container"></div>
-        </div>
-
-        <!-- 特性指示卡片 -->
-        <div class="features-grid">
-            <div class="feature-item">
-                <div class="feature-title"><span>🎬</span> 豆瓣首页与海报无损加速</div>
-                <div class="feature-desc">
-                    实时同步豆瓣热门电影、热播国产剧、欧美剧、韩剧、日剧、动漫、Top250 排行榜。内置防盗链高速图片反代，杜绝电视端海报破图。
-                </div>
-            </div>
-            <div class="feature-item">
-                <div class="feature-title"><span>🚀</span> 毫秒级并发与智能熔断</div>
-                <div class="feature-desc">
-                    7 大高清直链切片采集站 + 网盘多源并发聚合。设置全局 3 秒快速熔断，并配备高性能 TTL 双层缓存，二次调阅 &lt; 10ms。
-                </div>
-            </div>
-            <div class="feature-item">
-                <div class="feature-title"><span>🛡️</span> PanCheck 网盘死链秒检</div>
-                <div class="feature-desc">
-                    借鉴 PanCheck 探活架构，对夸克、阿里、百度等网盘分享链接进行轻量异步探活，毫秒过滤已失效死链，保障 100% 播放成功率。
-                </div>
-            </div>
-        </div>
-
-        <!-- 网盘 Token 可视化配置卡片 -->
-        <div class="card" style="margin-top: 24px;">
-            <div class="card-header">
-                <div class="card-title">
-                    <span>🔑</span> 4K 网盘播放凭据配置 (可选 · 实时保存)
-                </div>
-            </div>
-            <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 16px;">
-                如果你需要在 TVBox 中通过<b>夸克网盘、阿里云盘</b>原画播放 4K 高码率影视，可在此直接填入网盘凭据（不填则默认使用免网盘的高清秒播源）：
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
-                <div>
-                    <label style="font-size: 12px; color: var(--text-muted);">阿里云盘 Open Token:</label>
-                    <input type="text" id="aliOpenToken" class="search-input" style="margin-top: 6px; font-size: 13px;" placeholder="ali open_token">
-                </div>
-                <div>
-                    <label style="font-size: 12px; color: var(--text-muted);">夸克网盘 Cookie:</label>
-                    <input type="text" id="quarkCookie" class="search-input" style="margin-top: 6px; font-size: 13px;" placeholder="_UP_A4A_HP=...; b-user-id=...">
-                </div>
-            </div>
-            <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
-                <button class="copy-btn" onclick="saveTokenConfig()" style="background: var(--primary);">💾 保存网盘配置</button>
-            </div>
-        </div>
-
+      </div>
     </div>
 
-    <div id="toast" class="toast">已成功复制配置链接！</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>⚡</span> 全网多源极速搜索
+          <span class="card-sub">（并发聚合 · 自动探活）</span></div>
+        <div id="searchSpeed" style="font-size:12px;color:var(--primary)"></div>
+      </div>
+      <div class="search-area">
+        <input type="text" id="searchInput" class="search-input"
+               placeholder="输入影视名称，例如：庆余年、繁花、抓娃娃…"
+               onkeydown="if(event.key==='Enter')doSearch()">
+        <button class="btn btn-primary" onclick="doSearch()">极速搜索</button>
+      </div>
+      <div class="hot-keywords">
+        <span>🔥 热门：</span>
+        <span class="keyword-tag" onclick="quickSearch('庆余年')">庆余年</span>
+        <span class="keyword-tag" onclick="quickSearch('繁花')">繁花</span>
+        <span class="keyword-tag" onclick="quickSearch('抓娃娃')">抓娃娃</span>
+        <span class="keyword-tag" onclick="quickSearch('三体')">三体</span>
+        <span class="keyword-tag" onclick="quickSearch('年会不能停')">年会不能停</span>
+        <span class="keyword-tag" onclick="quickSearch('第二十条')">第二十条</span>
+      </div>
+      <div id="resultsBox" class="results-container"></div>
+    </div>
 
-    <script>
-        let currentMode = 'douban';
-        let qrcodeObj = null;
+    <div class="card">
+      <div class="card-header"><div class="card-title"><span>✨</span> 核心能力</div></div>
+      <div class="grid2">
+        <div>
+          <div style="font-weight:600;font-size:13px;margin-bottom:5px">🎬 豆瓣首页 + 海报无损加速</div>
+          <div style="font-size:12px;color:var(--muted)">
+            实时同步豆瓣热门电影 / 国产剧 / 美剧 / 韩剧 / 日剧 / 动漫 / Top250。内置防盗链反代，杜绝电视端海报破图。
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:13px;margin-bottom:5px">🚀 毫秒并发 + 全局熔断</div>
+          <div style="font-size:12px;color:var(--muted)">
+            7 大切片采集站 + 网盘聚合并发调度，到点即收不等慢源，实测 1.5~2s 出结果，缓存命中 0.02ms。
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:13px;margin-bottom:5px">🛡️ PanCheck 死链秒检</div>
+          <div style="font-size:12px;color:var(--muted)">
+            支持对接自建 PanCheck 服务，或使用内置轻量探活，毫秒过滤失效网盘链接，提升播放成功率。
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:600;font-size:13px;margin-bottom:5px">🔑 网盘扫码授权</div>
+          <div style="font-size:12px;color:var(--muted)">
+            阿里云盘支持扫码登录自动获取凭证；其他网盘可手机扫码打开填写页，免去在电视上打字的痛苦。
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        function updateConfigUrl() {
-            const origin = window.location.origin;
-            const fullUrl = `${origin}/tvbox?home=${currentMode}`;
-            const input = document.getElementById('configUrlInput');
-            input.value = fullUrl;
+  <!-- ============ 网盘密钥 ============ -->
+  <div id="tab-pan" class="section-hide">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>🔑</span> 网盘播放密钥
+          <span class="card-sub">（用于 TVBox 播放网盘 4K 原盘）</span></div>
+        <button class="btn btn-ghost btn-sm" onclick="loadTokenStatus()">🔄 刷新状态</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.8">
+        配置后可在 TVBox 中直接播放网盘原画 / 4K 高码率资源。不配置也不影响免网盘切片秒播源的正常使用。
+      </div>
+      <div class="pan-grid" id="panGrid"></div>
+    </div>
+  </div>
 
-            // 渲染二维码
-            const qrContainer = document.getElementById("qrcode");
-            qrContainer.innerHTML = "";
-            qrcodeObj = new QRCode(qrContainer, {
-                text: fullUrl,
-                width: 140,
-                height: 140,
-                colorDark : "#000000",
-                colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.M
-            });
+  <!-- ============ 系统设置 ============ -->
+  <div id="tab-settings" class="section-hide">
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>🔍</span> pansou-edge 网盘聚合搜索</div>
+        <div id="pansouState" style="font-size:12px;color:var(--muted)"></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.8">
+        填写你自建的 <b>pansou-edge</b>（Cloudflare Worker）地址，可获得更快的盘搜速度与更稳定的结果。
+        留空则使用内置公开节点。
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>pansou-edge 服务地址</label>
+          <input type="text" id="set_pansou_edge_url" placeholder="https://pansou-edge.xxx.workers.dev">
+          <div class="hint">不要带结尾斜杠，例如 https://pansou.yourdomain.com</div>
+        </div>
+        <div class="field">
+          <label>访问鉴权 Token（可选）</label>
+          <input type="password" id="set_pansou_edge_token" placeholder="若 Worker 配了 AUTH_TOKEN 则填写">
+          <div class="hint">对应 pansou-edge 的 AUTH_TOKEN 环境变量</div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-sm" onclick="testPansou()">🔌 测试连接</button>
+        <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="set_enable_pansou_edge"> 启用网盘聚合搜索
+        </label>
+      </div>
+      <div id="pansouTest" class="test-result"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>🛡️</span> PanCheck 网盘死链检测</div>
+        <div id="pancheckState" style="font-size:12px;color:var(--muted)"></div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.8">
+        填写你自建的 <b>PanCheck</b> 服务地址（如 <code>http://192.168.1.10:8774</code>），
+        可获得更准确的失效链接识别能力。留空则使用内置轻量探活。
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>PanCheck 服务地址</label>
+          <input type="text" id="set_pancheck_url" placeholder="http://192.168.1.10:8774">
+          <div class="hint">PanCheck 默认监听 8774 端口</div>
+        </div>
+        <div class="field">
+          <label>检测模式</label>
+          <select id="set_pancheck_mode">
+            <option value="auto">auto — 配了地址用远程，否则用内置</option>
+            <option value="remote">remote — 强制使用远程 PanCheck</option>
+            <option value="local">local — 强制使用内置轻量探活</option>
+            <option value="off">off — 关闭检测（最快）</option>
+          </select>
+          <div class="hint">关闭检测可进一步提速，但可能推送失效链接</div>
+        </div>
+      </div>
+      <div class="row-actions">
+        <button class="btn btn-ghost btn-sm" onclick="testPancheck()">🔌 测试连接</button>
+      </div>
+      <div id="pancheckTest" class="test-result"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div class="card-title"><span>⚡</span> 性能与体验</div></div>
+      <div class="grid2">
+        <div class="field">
+          <label>默认首页模式</label>
+          <select id="set_default_home">
+            <option value="douban">douban — 豆瓣热播首页（推荐）</option>
+            <option value="lite">lite — 极速纯搜版</option>
+            <option value="full">full — 全能离线套件版</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>搜索超时熔断（秒）</label>
+          <input type="text" id="set_search_timeout" placeholder="3.0">
+          <div class="hint">越小越快，推荐 2.5 ~ 3.5；越大覆盖源越多</div>
+        </div>
+        <div class="field">
+          <label>最大并发数</label>
+          <input type="text" id="set_max_concurrency" placeholder="20">
+        </div>
+        <div class="field">
+          <label>搜索缓存有效期（秒）</label>
+          <input type="text" id="set_cache_ttl_search" placeholder="1800">
+          <div class="hint">相同关键词在有效期内直接命中缓存，毫秒返回</div>
+        </div>
+        <div class="field">
+          <label>豆瓣数据缓存有效期（秒）</label>
+          <input type="text" id="set_cache_ttl_douban" placeholder="7200">
+        </div>
+        <div class="field">
+          <label>其他开关</label>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+            <label style="font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="set_enable_img_proxy"> 启用海报防盗链代理
+            </label>
+            <label style="font-size:13px;color:var(--text);display:flex;align-items:center;gap:8px;cursor:pointer">
+              <input type="checkbox" id="set_enable_danmu"> 启用弹幕
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="row-actions" style="margin-top:10px">
+        <button class="btn btn-primary" onclick="saveSettings()">💾 保存全部设置</button>
+        <button class="btn btn-ghost" onclick="resetSettings()">↩️ 恢复默认</button>
+        <span id="settingsState" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">FastBox · Docker 一键部署 · TVBox 极速聚合搜索与豆瓣订阅服务</div>
+</div>
+
+<!-- 扫码弹窗 -->
+<div class="modal-mask" id="qrModal">
+  <div class="modal">
+    <h3 id="qrModalTitle">扫码登录</h3>
+    <p id="qrModalDesc">请使用对应 App 扫描下方二维码</p>
+    <div class="qr-holder" id="qrHolder"></div>
+    <div class="status" id="qrStatus"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeQrModal()">关闭</button>
+      <button class="btn btn-primary" style="flex:1" id="qrRefreshBtn" onclick="refreshQr()">刷新二维码</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+let currentMode = 'douban';
+let qrPollTimer = null, qrSid = null, qrKind = '';
+let tokenStatus = {};
+
+function showToast(msg, isErr){
+  const t = document.getElementById('toast');
+  t.innerText = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  setTimeout(()=>{ t.className = 'toast'; }, 2400);
+}
+
+function switchTab(name, el){
+  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  ['main','pan','settings'].forEach(t=>{
+    const box = document.getElementById('tab-'+t);
+    if (box) box.classList.toggle('section-hide', t !== name);
+  });
+  if (name === 'pan') loadTokenStatus();
+  if (name === 'settings') loadSettings();
+}
+
+/* ---------- TVBox 配置 ---------- */
+function updateConfigUrl(){
+  const url = window.location.origin + '/tvbox?home=' + currentMode;
+  document.getElementById('configUrlInput').value = url;
+  const holder = document.getElementById('qrcode');
+  holder.innerHTML = '';
+  new QRCode(holder, {text:url, width:140, height:140,
+    colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+}
+function setMode(mode, el){
+  currentMode = mode;
+  document.querySelectorAll('.selector-btn').forEach(b=>b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  updateConfigUrl();
+}
+function copyConfigUrl(){
+  const i = document.getElementById('configUrlInput');
+  i.select();
+  if (navigator.clipboard){
+    navigator.clipboard.writeText(i.value).then(()=>showToast('已复制 TVBox 订阅链接！'))
+      .catch(()=>{ document.execCommand('copy'); showToast('已复制！'); });
+  } else { document.execCommand('copy'); showToast('已复制！'); }
+}
+
+/* ---------- 搜索 ---------- */
+function quickSearch(kw){ document.getElementById('searchInput').value = kw; doSearch(); }
+
+async function doSearch(){
+  const kw = document.getElementById('searchInput').value.trim();
+  if (!kw) return;
+  const box = document.getElementById('resultsBox');
+  const speed = document.getElementById('searchSpeed');
+  box.innerHTML = '<div style="text-align:center;padding:26px;color:var(--muted)">正在多源并发搜索…</div>';
+  speed.innerText = '';
+  try{
+    const res = await fetch('/api/search?q=' + encodeURIComponent(kw));
+    const data = await res.json();
+    speed.innerText = '耗时 ' + data.elapsed_ms + 'ms · 聚合 ' + data.total + ' 部';
+    if (!data.data || !data.data.length){
+      box.innerHTML = '<div style="text-align:center;padding:26px;color:var(--muted)">未找到与「' + kw + '」相关的有效资源</div>';
+      return;
+    }
+    let html = '';
+    data.data.forEach(film=>{
+      let srcHtml = '';
+      (film.sources||[]).forEach(src=>{
+        let eps = '';
+        (src.episodes||[]).slice(0,15).forEach(ep=>{
+          const isPan = /quark\.cn|alipan\.com|aliyundrive|baidu\.com|uc\.cn|xunlei|115\.com|123pan/.test(ep.url);
+          eps += '<a class="ep-item" href="' + ep.url + '" target="_blank" rel="noopener" title="' + ep.url + '">'
+               + (isPan ? '📁' : '▶') + ' ' + ep.name + '</a>';
+        });
+        srcHtml += '<div class="source-group">'
+          + '<div class="source-title"><span>⚡ ' + (src.source_name||'线路') + '</span>'
+          + '<span style="font-size:11px;color:#6e7681">(' + (src.episodes||[]).length + ' 个资源)</span></div>'
+          + '<div class="ep-list">' + eps + '</div></div>';
+      });
+      html += '<div class="film-card">'
+        + '<div class="film-header"><div class="film-title"><span>🎬</span> ' + film.vod_name + '</div>'
+        + '<div class="film-meta">' + (film.vod_year ? film.vod_year + ' · ' : '') + (film.vod_remarks||'') + '</div></div>'
+        + srcHtml + '</div>';
+    });
+    box.innerHTML = html;
+  }catch(e){
+    box.innerHTML = '<div style="text-align:center;padding:26px;color:var(--err)">搜索异常：' + e.message + '</div>';
+  }
+}
+
+/* ---------- 网盘密钥 ---------- */
+const PAN_META = [
+  {key:'aliyun', name:'阿里云盘', icon:'🟦', qr:true,
+   desc:'支持扫码授权，自动获取 open_token（推荐，可播放 4K 原画）'},
+  {key:'quark', name:'夸克网盘', icon:'🟨', qr:true, field:'quark_cookie',
+   desc:'扫码后在手机上粘贴 Cookie，免去电视端打字'},
+  {key:'uc', name:'UC 网盘', icon:'🟠', qr:true, field:'uc_cookie',
+   desc:'扫码后在手机上粘贴 Cookie'},
+  {key:'115', name:'115 网盘', icon:'🟩', qr:true, field:'yd_auth',
+   desc:'扫码后在手机上粘贴 Cookie'},
+  {key:'thunder', name:'迅雷网盘', icon:'🔵', qr:false,
+   fields:[['thunder_username','账号'],['thunder_password','密码']], desc:'填写迅雷账号密码'},
+  {key:'pikpak', name:'PikPak', icon:'🟣', qr:false,
+   fields:[['pikpak_username','账号'],['pikpak_password','密码']], desc:'填写 PikPak 账号密码'}
+];
+
+const STATUS_MAP = {
+  aliyun: ['阿里云盘 (open_token)','阿里云盘 (refresh_token)'],
+  quark: ['夸克网盘 (cookie)'],
+  uc: ['UC网盘 (cookie)'],
+  '115': ['115网盘 (cookie)'],
+  thunder: ['迅雷网盘 (账号)'],
+  pikpak: ['PikPak (账号)']
+};
+
+async function loadTokenStatus(){
+  try{
+    const r = await fetch('/api/config/status');
+    const j = await r.json();
+    tokenStatus = (j.data && j.data['网盘密钥']) || {};
+  }catch(e){ tokenStatus = {}; }
+  renderPanGrid();
+}
+
+function panConfigured(key){
+  const keys = STATUS_MAP[key] || [];
+  return keys.some(k => tokenStatus[k] === true);
+}
+
+function renderPanGrid(){
+  const grid = document.getElementById('panGrid');
+  let html = '';
+  PAN_META.forEach(m=>{
+    const on = panConfigured(m.key);
+    let body = '';
+    if (m.key === 'aliyun'){
+      body = '<button class="btn btn-primary btn-sm" onclick="startAliyunQr()">📱 扫码授权登录</button>'
+        + '<div class="field" style="margin:8px 0 0"><label>或手动填写 open_token</label>'
+        + '<textarea id="tok_open_token" placeholder="粘贴阿里云盘 open_token"></textarea></div>'
+        + '<button class="btn btn-ghost btn-sm" onclick="saveField(\'ali_open_token\',\'tok_open_token\')">保存</button>';
+    } else if (m.qr){
+      const url = window.location.origin + '/api/qr/mobile/' + m.key;
+      body = '<button class="btn btn-primary btn-sm" onclick="showMobileQr(\'' + m.key + '\',\'' + m.name + '\',\'' + url + '\')">'
+        + '📱 手机扫码填写</button>'
+        + '<div class="field" style="margin:8px 0 0"><label>或在电脑上直接粘贴</label>'
+        + '<textarea id="tok_' + m.field + '" placeholder="粘贴 ' + m.name + ' Cookie"></textarea></div>'
+        + '<button class="btn btn-ghost btn-sm" onclick="saveField(\'' + m.field + '\',\'tok_' + m.field + '\')">保存</button>';
+    } else {
+      body = m.fields.map(f=>'<div class="field" style="margin-bottom:8px"><label>' + f[1] + '</label>'
+        + '<input type="text" id="tok_' + f[0] + '" placeholder="' + f[1] + '"></div>').join('')
+        + '<button class="btn btn-ghost btn-sm" onclick="saveFields(' + JSON.stringify(m.fields.map(f=>f[0])) + ')">保存</button>';
+    }
+    html += '<div class="pan-item">'
+      + '<div class="pan-head"><div class="pan-name"><span>' + m.icon + '</span> ' + m.name + '</div>'
+      + '<span class="pan-badge ' + (on?'on':'off') + '">' + (on?'✅ 已配置':'未配置') + '</span></div>'
+      + '<div style="font-size:12px;color:var(--muted)">' + m.desc + '</div>'
+      + (m.qr ? '<span class="pan-badge qr">' + (m.key==='aliyun'?'扫码登录':'扫码填写') + '</span>'
+              : '<span class="pan-badge off">手动填写</span>')
+      + body + '</div>';
+  });
+  grid.innerHTML = html;
+}
+
+async function saveField(field, inputId){
+  const v = document.getElementById(inputId).value.trim();
+  if (!v){ showToast('内容不能为空', true); return; }
+  const body = {}; body[field] = v;
+  await postToken(body);
+}
+async function saveFields(fields){
+  const body = {};
+  fields.forEach(f=>{
+    const el = document.getElementById('tok_'+f);
+    if (el) body[f] = el.value.trim();
+  });
+  await postToken(body);
+}
+async function postToken(body){
+  try{
+    const r = await fetch('/api/token', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const j = await r.json();
+    if (j.code === 200){ showToast(j.msg || '保存成功'); loadTokenStatus(); }
+    else showToast(j.detail || '保存失败', true);
+  }catch(e){ showToast('保存失败：' + e.message, true); }
+}
+
+/* ---------- 扫码弹窗 ---------- */
+function showQrModal(title, desc){
+  document.getElementById('qrModalTitle').innerText = title;
+  document.getElementById('qrModalDesc').innerText = desc;
+  document.getElementById('qrModal').classList.add('show');
+}
+function closeQrModal(){
+  document.getElementById('qrModal').classList.remove('show');
+  if (qrPollTimer){ clearInterval(qrPollTimer); qrPollTimer = null; }
+}
+function setQrStatus(text, color){
+  const el = document.getElementById('qrStatus');
+  el.innerText = text;
+  el.style.color = color || 'var(--muted)';
+}
+function renderQrInto(content){
+  const holder = document.getElementById('qrHolder');
+  holder.innerHTML = '';
+  new QRCode(holder, {text:content, width:190, height:190,
+    colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M});
+}
+
+function showMobileQr(kind, name, url){
+  qrKind = kind;
+  if (qrPollTimer){ clearInterval(qrPollTimer); qrPollTimer = null; }
+  document.getElementById('qrRefreshBtn').style.display = 'none';
+  showQrModal('手机扫码填写 ' + name, '用手机相机 / 微信扫码，在手机上粘贴后即可保存到服务器');
+  renderQrInto(url);
+  setQrStatus('扫码后在手机上完成填写即可', 'var(--primary)');
+}
+
+function refreshQr(){
+  if (qrKind === 'aliyun') startAliyunQr();
+}
+
+async function startAliyunQr(){
+  qrKind = 'aliyun';
+  if (qrPollTimer){ clearInterval(qrPollTimer); qrPollTimer = null; }
+  document.getElementById('qrRefreshBtn').style.display = '';
+  showQrModal('阿里云盘 扫码登录', '请使用「阿里云盘」App 扫描下方二维码并确认授权');
+  document.getElementById('qrHolder').innerHTML = '<div style="color:#666;font-size:13px">二维码生成中…</div>';
+  setQrStatus('正在生成二维码…');
+
+  try{
+    const r = await fetch('/api/qr/aliyun/generate', {method:'POST'});
+    const j = await r.json();
+    if (j.code !== 200){ setQrStatus(j.detail || '生成失败', 'var(--err)'); return; }
+    qrSid = j.data.sid;
+    renderQrInto(j.data.qr_content);
+    setQrStatus('等待扫码…');
+
+    qrPollTimer = setInterval(async ()=>{
+      try{
+        const pr = await fetch('/api/qr/aliyun/poll?sid=' + qrSid);
+        const pj = await pr.json();
+        const d = pj.data || {};
+        if (d.status === 'WAITING'){ setQrStatus('等待扫码…'); }
+        else if (d.status === 'SCANNED'){ setQrStatus('已扫码，请在手机上点击确认', 'var(--warn)'); }
+        else if (d.status === 'CONFIRMED'){
+          clearInterval(qrPollTimer); qrPollTimer = null;
+          setQrStatus('登录成功，正在保存凭证…', 'var(--ok)');
+          const sr = await fetch('/api/qr/aliyun/save', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({refresh_token: d.refresh_token || ''})
+          });
+          const sj = await sr.json();
+          if (sj.code === 200){
+            setQrStatus('✅ ' + sj.msg + (sj.data && sj.data.hint ? '（' + sj.data.hint + '）' : ''), 'var(--ok)');
+            showToast('阿里云盘登录成功！');
+            loadTokenStatus();
+            setTimeout(closeQrModal, 1800);
+          } else { setQrStatus(sj.detail || '保存失败', 'var(--err)'); }
         }
-
-        function setMode(mode) {
-            currentMode = mode;
-            document.querySelectorAll('.selector-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-            updateConfigUrl();
+        else if (d.status === 'EXPIRED'){
+          setQrStatus('二维码已过期，请点击刷新', 'var(--err)');
+          clearInterval(qrPollTimer); qrPollTimer = null;
         }
+        else { setQrStatus(d.message || '状态未知'); }
+      }catch(e){ /* 忽略单次轮询异常 */ }
+    }, 2000);
+  }catch(e){ setQrStatus('生成失败：' + e.message, 'var(--err)'); }
+}
 
-        function copyConfigUrl() {
-            const input = document.getElementById('configUrlInput');
-            input.select();
-            navigator.clipboard.writeText(input.value).then(() => {
-                showToast("已成功复制 TVBox 订阅链接！");
-            });
-        }
+/* ---------- 系统设置 ---------- */
+const SETTING_IDS = ['pansou_edge_url','pansou_edge_token','enable_pansou_edge',
+  'pancheck_url','pancheck_mode','default_home','search_timeout','max_concurrency',
+  'cache_ttl_search','cache_ttl_douban','enable_img_proxy','enable_danmu'];
+const NUM_KEYS = ['search_timeout','max_concurrency','cache_ttl_search','cache_ttl_douban'];
 
-        function showToast(msg) {
-            const toast = document.getElementById('toast');
-            toast.innerText = msg;
-            toast.classList.add('show');
-            setTimeout(() => toast.classList.remove('show'), 2000);
-        }
+async function loadSettings(){
+  try{
+    const r = await fetch('/api/settings');
+    const j = await r.json();
+    (j.data||[]).forEach(item=>{
+      const el = document.getElementById('set_' + item.key);
+      if (!el) return;
+      if (el.type === 'checkbox') el.checked = !!item.value;
+      else el.value = (item.value === null || item.value === undefined) ? '' : item.value;
+    });
+    const st = await fetch('/api/config/status');
+    const d = (await st.json()).data || {};
+    const pe = d.pansou_edge || {}, pc = d.pancheck || {};
+    document.getElementById('pansouState').innerText = pe['自建地址'] || '';
+    document.getElementById('pancheckState').innerText =
+      (pc['检测模式']||'') + ' → 实际生效：' + (pc['实际生效']||'');
+  }catch(e){ console.warn(e); }
+}
 
-        function quickSearch(kw) {
-            document.getElementById('searchInput').value = kw;
-            doSearch();
-        }
+async function saveSettings(){
+  const body = {};
+  for (const key of SETTING_IDS){
+    const el = document.getElementById('set_' + key);
+    if (!el) continue;
+    if (el.type === 'checkbox'){ body[key] = el.checked; continue; }
+    let v = el.value.trim();
+    if (v === '') continue;
+    if (NUM_KEYS.includes(key)){
+      const n = Number(v);
+      if (isNaN(n)){ showToast(key + ' 必须是数字', true); return; }
+      v = n;
+    }
+    body[key] = v;
+  }
+  try{
+    const r = await fetch('/api/settings', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({settings: body})
+    });
+    const j = await r.json();
+    if (j.code === 200){
+      showToast('设置已保存并立即生效！');
+      document.getElementById('settingsState').innerText = '已保存 ' + new Date().toLocaleTimeString();
+      loadSettings();
+    } else showToast(j.detail || '保存失败', true);
+  }catch(e){ showToast('保存失败：' + e.message, true); }
+}
 
-        async function doSearch() {
-            const kw = document.getElementById('searchInput').value.trim();
-            if (!kw) return;
+async function resetSettings(){
+  if (!confirm('确定要恢复为环境变量默认配置吗？')) return;
+  await fetch('/api/settings/reset', {method:'POST'});
+  showToast('已恢复默认配置');
+  loadSettings();
+}
 
-            const box = document.getElementById('resultsBox');
-            const speedBox = document.getElementById('searchSpeed');
-            box.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">正在多源并发搜索中，请稍候...</div>`;
-            speedBox.innerText = "";
+function showTestResult(elId, ok, msg, detail){
+  const el = document.getElementById(elId);
+  el.className = 'test-result show ' + (ok ? 'ok' : 'err');
+  el.innerHTML = '<b>' + (ok?'✅':'❌') + ' ' + msg + '</b>'
+    + (detail ? '<br><span style="opacity:.85">' + detail + '</span>' : '');
+}
 
-            try {
-                const res = await fetch(`/api/search?q=${encodeURIComponent(kw)}`);
-                const data = await res.json();
-                
-                speedBox.innerText = `耗时: ${data.elapsed_ms}ms · 聚合影视: ${data.total} 部`;
+async function testPansou(){
+  const url = document.getElementById('set_pansou_edge_url').value.trim();
+  if (!url){ showTestResult('pansouTest', false, '请先填写 pansou-edge 地址'); return; }
+  showTestResult('pansouTest', true, '正在测试连接…');
+  try{
+    const r = await fetch('/api/settings/test/pansou?url=' + encodeURIComponent(url), {method:'POST'});
+    const j = await r.json();
+    showTestResult('pansouTest', !!j.ok, j.msg, (j.tried||[]).join(' | '));
+  }catch(e){ showTestResult('pansouTest', false, '测试失败', e.message); }
+}
 
-                if (!data.data || data.data.length === 0) {
-                    box.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted);">未找到与 "${kw}" 相关的有效资源</div>`;
-                    return;
-                }
+async function testPancheck(){
+  const url = document.getElementById('set_pancheck_url').value.trim();
+  if (!url){ showTestResult('pancheckTest', false, '请先填写 PanCheck 地址'); return; }
+  showTestResult('pancheckTest', true, '正在测试连接…');
+  try{
+    const r = await fetch('/api/settings/test/pancheck?url=' + encodeURIComponent(url), {method:'POST'});
+    const j = await r.json();
+    showTestResult('pancheckTest', !!j.ok, j.msg, (j.tried||[]).join(' | '));
+  }catch(e){ showTestResult('pancheckTest', false, '测试失败', e.message); }
+}
 
-                let html = "";
-                data.data.forEach(film => {
-                    let sourcesHtml = "";
-                    (film.sources || []).forEach(src => {
-                        let epsHtml = "";
-                        (src.episodes || []).slice(0, 15).forEach(ep => {
-                            if (ep.url.startsWith("http") && (ep.url.includes("quark.cn") || ep.url.includes("alipan.com") || ep.url.includes("baidu.com"))) {
-                                epsHtml += `<a class="ep-item" href="${ep.url}" target="_blank" title="打开网盘链接">📁 ${ep.name}</a>`;
-                            } else {
-                                epsHtml += `<a class="ep-item" href="${ep.url}" target="_blank" title="点击播放直链">▶ ${ep.name}</a>`;
-                            }
-                        });
-
-                        sourcesHtml += `
-                            <div class="source-group">
-                                <div class="source-title">
-                                    <span>⚡ 线路: ${src.source_name}</span>
-                                    <span style="font-size:11px; color:var(--text-muted);">(${src.episodes ? src.episodes.length : 0} 个集数/资源)</span>
-                                </div>
-                                <div class="ep-list">${epsHtml}</div>
-                            </div>
-                        `;
-                    });
-
-                    html += `
-                        <div class="film-card">
-                            <div class="film-header">
-                                <div class="film-title">
-                                    <span>🎬</span> ${film.vod_name}
-                                </div>
-                                <div class="film-meta">
-                                    ${film.vod_year ? film.vod_year + ' · ' : ''}${film.vod_remarks || ''}
-                                </div>
-                            </div>
-                            ${sourcesHtml}
-                        </div>
-                    `;
-                });
-
-                box.innerHTML = html;
-            } catch (err) {
-                box.innerHTML = `<div style="text-align:center; padding:30px; color:#f85149;">搜索请求异常: ${err.message}</div>`;
-            }
-        }
-
-        async function loadTokenConfig() {
-            try {
-                const res = await fetch('/api/token');
-                const json = await res.json();
-                if (json.data) {
-                    if (json.data.ali_open_token) document.getElementById('aliOpenToken').value = json.data.ali_open_token;
-                    if (json.data.quark_cookie) document.getElementById('quarkCookie').value = json.data.quark_cookie;
-                }
-            } catch(e) {}
-        }
-
-        async function saveTokenConfig() {
-            const ali_open_token = document.getElementById('aliOpenToken').value.trim();
-            const quark_cookie = document.getElementById('quarkCookie').value.trim();
-            try {
-                const res = await fetch('/api/token', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ ali_open_token, quark_cookie })
-                });
-                const json = await res.json();
-                showToast(json.msg || '保存成功');
-            } catch(e) {
-                showToast('保存失败: ' + e.message);
-            }
-        }
-
-        // 初始化
-        window.onload = () => {
-            updateConfigUrl();
-            loadTokenConfig();
-        };
-    </script>
+/* ---------- 初始化 ---------- */
+window.onload = function(){
+  updateConfigUrl();
+  loadTokenStatus();
+};
+</script>
 </body>
 </html>

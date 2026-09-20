@@ -89,6 +89,127 @@ docker run -d \
 
 ---
 
+## ⚙️ 配置指南（网页可视化 + 扫码授权）
+
+FastBox 的配置分为两大类，**全部无需改代码、无需重启容器**：
+
+| 配置类别 | 配置方式 | 入口 |
+| :--- | :--- | :--- |
+| **网盘密钥** | 📱 **扫码授权**（阿里云盘）/ 扫码填写（其他网盘） | 网页 → 「🔑 网盘密钥」 |
+| **pansou-edge 地址** | 🌐 网页表单 + 一键连通性测试 | 网页 → 「⚙️ 系统设置」 |
+| **PanCheck 地址** | 🌐 网页表单 + 一键连通性测试 | 网页 → 「⚙️ 系统设置」 |
+| **性能 / 首页 / 缓存** | 🌐 网页表单 | 网页 → 「⚙️ 系统设置」 |
+
+> 💡 网页端保存的配置写入 `data/runtime_config.json`，**优先级高于环境变量**，且挂载了 `./data` 卷后重启容器依然保留。
+
+### 1️⃣ 网盘密钥（扫码授权）
+
+进入网页顶部 **「🔑 网盘密钥」** 标签页：
+
+#### 阿里云盘 — 真正的扫码授权登录
+
+1. 点击 **「📱 扫码授权登录」**；
+2. 弹出二维码，用手机 **阿里云盘 App** 扫描；
+3. 手机上点击「确认登录」；
+4. 系统自动获取 `refresh_token`，并调用兑换接口拿到 `open_token`，**自动写入配置**。
+
+> 全程无需手动复制任何 Cookie，是目前最省心的方式。若扫码流程因官方接口调整而失效，可改用「手动填写 open_token」。
+
+#### 夸克 / UC / 115 网盘 — 手机扫码填写
+
+1. 点击 **「📱 手机扫码填写」**；
+2. 用手机相机 / 微信扫描弹出的二维码；
+3. 手机会打开一个填写页，在手机上粘贴 Cookie 后点保存；
+4. 配置立即写入服务器。
+
+> 相比在电视遥控器上一个字一个字敲，扫码后在手机上粘贴体验好得多。
+
+#### 迅雷 / PikPak — 账号密码
+
+直接在网页表单填写账号密码即可。
+
+### 2️⃣ pansou-edge 网盘聚合搜索（可选但推荐）
+
+> **什么是 pansou-edge？** 它是基于 Cloudflare Workers 的自建网盘搜索聚合服务（参考 [dszz453/pansou-edge](https://github.com/dszz453/pansou-edge)）。
+> 自建后搜索速度更快、无频率限制、结果更稳定。
+
+**在网页「⚙️ 系统设置」中配置：**
+
+| 字段 | 说明 | 示例 |
+| :--- | :--- | :--- |
+| **pansou-edge 服务地址** | 你部署好的 Worker 地址（结尾不要带 `/`） | `https://pansou.yourdomain.workers.dev` |
+| **访问鉴权 Token** | 若 Worker 里配了 `AUTH_TOKEN` 则填写 | `your_secret_token` |
+| **启用网盘聚合搜索** | 勾选后生效 | ✅ |
+
+填写后点击 **「🔌 测试连接」**，系统会自动探测 `/api/search`、`/search`、`/health` 等多个常见端点并给出结果。
+
+**留空时的行为**：自动回退使用内置的公开盘搜节点，功能不受影响。
+
+**也可用环境变量配置**（docker-compose.yml）：
+```yaml
+environment:
+  - PANSOU_EDGE_URL=https://pansou.yourdomain.workers.dev
+  - PANSOU_EDGE_TOKEN=your_secret_token
+```
+
+### 3️⃣ PanCheck 网盘死链检测（可选）
+
+> **什么是 PanCheck？** 多平台网盘分享链接有效性检测系统（参考 [Lampon/PanCheck](https://github.com/Lampon/PanCheck)），默认监听 `8774` 端口。
+
+**在网页「⚙️ 系统设置」中配置：**
+
+| 字段 | 说明 | 示例 |
+| :--- | :--- | :--- |
+| **PanCheck 服务地址** | 自建 PanCheck 的地址 | `http://192.168.1.10:8774` |
+| **检测模式** | `auto` / `remote` / `local` / `off` | `auto` |
+
+**四种检测模式说明：**
+
+| 模式 | 行为 | 适用场景 |
+| :--- | :--- | :--- |
+| `auto` | 配了地址走远程，否则用内置 | **默认推荐** |
+| `remote` | 强制使用远程 PanCheck 服务 | 已部署 PanCheck，追求最准 |
+| `local` | 强制使用内置轻量探活（HTTP 关键字判断） | 不想部署额外服务 |
+| `off` | 完全关闭检测（最快） | 追求极致速度 |
+
+填写后点击 **「🔌 测试连接」** 即可验证。
+
+**也可用环境变量配置**：
+```yaml
+environment:
+  - PANCHECK_MODE=auto
+  - PANCHECK_URL=http://192.168.1.10:8774
+```
+
+### 4️⃣ 性能参数调优
+
+网页「⚙️ 系统设置 → 性能与体验」中可实时调整：
+
+| 参数 | 默认 | 说明 |
+| :--- | :--- | :--- |
+| **默认首页模式** | `douban` | 新订阅链接默认使用的首页 |
+| **搜索超时熔断（秒）** | `3.0` | 越小越快；推荐 2.5~3.5 |
+| **最大并发数** | `20` | 同时进行的搜索请求上限 |
+| **搜索缓存有效期（秒）** | `1800` | 相同关键词在此期内直接命中缓存 |
+| **豆瓣数据缓存有效期（秒）** | `7200` | 豆瓣榜单缓存时长 |
+| **海报防盗链代理** | 开 | 解决电视端豆瓣海报 403 破图 |
+| **弹幕** | 开 | 是否启用弹幕 |
+
+> 📊 **实测性能**：首次搜索约 **1.5~1.9 秒**，缓存命中约 **0.02 毫秒**（比修复前提速约 9 倍）。
+
+### 5️⃣ 配置自检接口
+
+浏览器直接访问 `/api/config/status`，可查看当前所有配置的生效状态（不含密钥明文）：
+
+```bash
+curl http://<服务器IP>:8088/api/config/status
+```
+
+返回内容包括：pansou-edge 是否启用及地址、PanCheck 检测模式与实际生效方式、各网盘密钥是否已配置等。
+
+---
+
+
 ## 🛠️ API 接口一览表
 
 FastBox 同时遵循标准 MacCMS V10 (VOD) 协议，可直接作为一个独立的“采集站/聚合搜索站点”接入到你现有的任何 TVBox 接口配置中：
@@ -104,6 +225,22 @@ FastBox 同时遵循标准 MacCMS V10 (VOD) 协议，可直接作为一个独立
 - **图片防盗链代理**：`GET /api/img?url=https://img1.doubanio.com/...`
 - **Web 统一搜索接口**：`GET /api/search?q=庆余年`
 
+### 配置与扫码授权接口
+
+- **配置自检面板**：`GET /api/config/status`
+- **读取全部可配置项**：`GET /api/settings`
+- **保存配置**：`POST /api/settings` （Body: `{"settings":{...}}`）
+- **恢复默认**：`POST /api/settings/reset`
+- **测试 pansou-edge 连通性**：`POST /api/settings/test/pansou?url=...`
+- **测试 PanCheck 连通性**：`POST /api/settings/test/pancheck?url=...`
+- **网盘密钥读取（脱敏）**：`GET /api/token`
+- **网盘密钥保存**：`POST /api/token`
+- **阿里云盘扫码—生成二维码**：`POST /api/qr/aliyun/generate`
+- **阿里云盘扫码—轮询状态**：`GET /api/qr/aliyun/poll?sid=...`
+- **阿里云盘扫码—保存凭证**：`POST /api/qr/aliyun/save`
+- **其他网盘手机填写页**：`GET /api/qr/mobile/{quark|uc|115|thunder|pikpak}`
+
+
 ---
 
 ## 📁 目录结构
@@ -114,25 +251,32 @@ FastBox 同时遵循标准 MacCMS V10 (VOD) 协议，可直接作为一个独立
 ├── docker-compose.yml          # Docker Compose 编排文件
 ├── requirements.txt            # Python 依赖库
 ├── README.md                   # 详细使用与说明文档
+├── DEPLOY-GUIDE.md             # 部署指南（含虚拟机环境专项方案）
 ├── app/
 │   ├── main.py                 # FastAPI 核心入口与服务装配
-│   ├── config.py               # 系统环境与超参数配置
+│   ├── config.py               # 配置层（网页配置 > 环境变量 > 默认值）
 │   ├── core/
-│   │   ├── aggregator.py       # 极速多源并发聚合并发引擎
+│   │   ├── aggregator.py       # 极速多源并发聚合引擎（全局截止熔断）
 │   │   ├── douban.py           # 豆瓣热榜分类与海报转换器
-│   │   ├── pan_check.py        # PanCheck 网盘死链探活检测
-│   │   └── cache.py            # 高性能双层 TTL 内存缓存
+│   │   ├── pan_check.py        # PanCheck 网盘死链探活（远程/内置双模式）
+│   │   ├── aliyun_qr.py        # 阿里云盘扫码授权登录
+│   │   ├── runtime_config.py   # 运行时可变配置持久化存储
+│   │   └── cache.py            # 高性能 TTL 内存缓存
 │   ├── providers/
 │   │   ├── base.py             # 搜索源抽象基类
 │   │   ├── collectors.py       # 7大免网盘高清切片秒播采集站源
-│   │   └── pansou.py           # 夸克/阿里/百度全网盘搜聚合源
+│   │   └── pansou.py           # 网盘聚合搜索（支持自建 pansou-edge）
 │   ├── routers/
 │   │   ├── tvbox.py            # TVBox 订阅生成路由
 │   │   ├── vod.py              # 标准 MacCMS V10 协议路由
 │   │   ├── douban_api.py       # 豆瓣分类与防盗链图片代理路由
-│   │   └── search.py           # Web 控制台搜索 API
+│   │   ├── search.py           # Web 控制台搜索 API
+│   │   ├── token_api.py        # 网盘密钥管理与配置自检
+│   │   └── config_api.py       # 系统设置、连通性测试、扫码授权
 │   └── templates/
-│       └── index.html          # 现代化交互式 Web 控制台与二维码生成
+│       └── index.html          # Web 控制台（搜索/密钥/设置 三标签页）
+├── data/
+│   └── runtime_config.json     # 网页端保存的配置（需挂载持久化）
 └── static/
     └── pg/                     # 本地托管的 pg.jar 与爬虫/配置文件 (来自 pg.zip)
 ```
@@ -145,7 +289,23 @@ FastBox 同时遵循标准 MacCMS V10 (VOD) 协议，可直接作为一个独立
 A：无需担心！FastBox 内部所有豆瓣海报均自动通过服务端的 `/api/img` 代理加速分发，并附带防盗链伪装头与内存图片缓存，电视端加载流畅且 100% 不破图。
 
 **Q2：如何调整搜索超时时间？**  
-A：在 `docker-compose.yml` 中修改 `SEARCH_TIMEOUT=2.5`（单位秒）。数值越小响应越快；数值稍大（如 3.5~4.0）能包含更多更远的网盘源，推荐设置为 3.0 秒。
+A：**推荐直接在网页上改** —— 打开 `http://<IP>:8088` → 「⚙️ 系统设置」→「性能与体验」→ 修改「搜索超时熔断」，保存后**立即生效**，无需重启容器。也可在 `docker-compose.yml` 中设置 `SEARCH_TIMEOUT=2.5`（作为默认值）。
 
 **Q3：我想把它部署在内网穿透（如 FRP / Cloudflare Tunnel / DDNS）后，TVBox 怎么用？**  
 A：FastBox 采用动态 Host 解析设计，只要你通过 `http://your-domain.com:8088` 访问控制台，复制出的链接自动就是你的域名地址，TVBox 在外网也能完美拉取配置和进行极速搜索！
+
+**Q4：网盘密钥一定要配置吗？**  
+A：**不需要**。不配置任何网盘密钥，依然可以正常使用 7 大免网盘切片秒播源（暴风、量子、红牛等），点开即播。配置网盘密钥只是为了额外解锁「网盘 4K 原盘」这类高码率资源。
+
+**Q5：阿里云盘扫码提示「二维码已过期」怎么办？**  
+A：二维码有效期约 5 分钟。点击弹窗里的「刷新二维码」重新生成即可。若扫码接口因官方调整持续失败，可改用「手动填写 open_token」。
+
+**Q6：网页上改的配置，重启容器后会丢吗？**  
+A：不会。配置写入 `data/runtime_config.json`。只要 `docker-compose.yml` 中保留了 `- ./data:/app/data` 这行卷挂载，重启后配置依然生效。
+
+**Q7：`auto` / `remote` / `local` / `off` 四种 PanCheck 模式怎么选？**  
+A：一般保持 `auto` 即可（配了地址就走远程，没配就用内置）。如果你追求极致速度、不在乎少量死链，选 `off`；如果已部署 PanCheck 且要求最准，选 `remote`。
+
+**Q8：怎么确认我的 pansou-edge / PanCheck 地址配对了？**  
+A：在「⚙️ 系统设置」中填好地址后，点击旁边的 **「🔌 测试连接」** 按钮，系统会自动探测多个常见端点并返回 HTTP 状态码，一目了然。也可访问 `/api/config/status` 查看全局配置自检结果。
+
