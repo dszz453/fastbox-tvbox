@@ -1,0 +1,32 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 本地临时文件 / 调试产物 ----
+_sysinfo*.txt
+push_progress.log
+docker_status.json
+*.log
+
+# ---- 打包产物 ----
+fastbox-docker.zip
+*.zip
+
+# ---- Docker ----
+.docker/
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ---- 本地工具数据（不纳入版本管理，但不删除） ----
+.workbuddy-ai/
+
+# ---- 注意 ----
+# static/ 目录必须提交！它包含 pg.jar 离线爬虫套件，
+# 是镜像正常运行的关键组成部分，不可被忽略。
