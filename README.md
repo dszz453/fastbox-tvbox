@@ -248,6 +248,8 @@ FastBox 同时遵循标准 MacCMS V10 (VOD) 协议，可直接作为一个独立
 - **豆瓣数据获取**：`GET /api/douban/list?type_id=hot_tv&page=1`
 - **图片防盗链代理**：`GET /api/img?url=https://img1.doubanio.com/...`
 - **Web 统一搜索接口**：`GET /api/search?q=庆余年`
+- **清理内存缓存**：`POST /api/cache/clear?kind=all|search|douban|pancheck`
+  - 排查「某关键词结果不完整」时一键重聚合，无需重启容器
 
 ### 配置与扫码授权接口
 
