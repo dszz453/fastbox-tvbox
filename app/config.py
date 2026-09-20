@@ -40,6 +40,9 @@ class Config:
     _ENV_PANCHECK_URL = _env_str("PANCHECK_URL").rstrip("/")
     _ENV_PANCHECK_TIMEOUT = float(os.getenv("PANCHECK_TIMEOUT", "1.5"))
     _ENV_PANCHECK_BATCH_SIZE = int(os.getenv("PANCHECK_BATCH_SIZE", "30"))
+    # 单次搜索最多检测多少条链接。超出部分不做探活直接保留，
+    # 避免为了过滤几十条死链而把整体响应拖到数秒。
+    _ENV_PANCHECK_MAX_LINKS = int(os.getenv("PANCHECK_MAX_LINKS", "30"))
 
     _ENV_CACHE_TTL_SEARCH = int(os.getenv("CACHE_TTL_SEARCH", "1800"))
     _ENV_CACHE_TTL_DOUBAN = int(os.getenv("CACHE_TTL_DOUBAN", "7200"))
@@ -99,6 +102,10 @@ class Config:
     @property
     def PANCHECK_BATCH_SIZE(self) -> int:
         return int(runtime_store.get("pancheck_batch_size", self._ENV_PANCHECK_BATCH_SIZE))
+
+    @property
+    def PANCHECK_MAX_LINKS(self) -> int:
+        return max(0, int(runtime_store.get("pancheck_max_links", self._ENV_PANCHECK_MAX_LINKS)))
 
     # ---- 缓存 ----
     @property

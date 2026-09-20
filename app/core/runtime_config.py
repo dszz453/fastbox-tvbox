@@ -36,6 +36,7 @@ MUTABLE_SCHEMA: Dict[str, type] = {
     "pancheck_url": str,
     "pancheck_timeout": float,
     "pancheck_batch_size": int,
+    "pancheck_max_links": int,    # 单次搜索最多检测链接数，0 表示不检测
     # 缓存
     "cache_ttl_search": int,
     "cache_ttl_douban": int,

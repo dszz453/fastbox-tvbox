@@ -22,6 +22,8 @@ PAN_PATTERNS = [
     ("115",    r'https?://(?:115\.com|anxia\.com)/s/[a-zA-Z0-9]+'),
     ("123",    r'https?://www\.123pan\.com/s/[a-zA-Z0-9\-]+'),
     ("tianyi", r'https?://cloud\.189\.cn/t/[a-zA-Z0-9]+'),
+    ("guangya", r'https?://(?:www\.)?guangyapan\.com/s/[a-zA-Z0-9_\-]+'),
+    ("mobile139", r'https?://yun\.139\.com/shareweb/#/w/[a-zA-Z0-9]+'),
     ("magnet", r'magnet:\?xt=urn:btih:[a-zA-Z0-9]+'),
 ]
 
@@ -29,6 +31,7 @@ PAN_DISPLAY_NAME = {
     "quark": "夸克网盘", "ali": "阿里云盘", "baidu": "百度网盘",
     "uc": "UC网盘", "xunlei": "迅雷网盘", "115": "115网盘",
     "123": "123网盘", "tianyi": "天翼云盘", "magnet": "磁力链接",
+    "guangya": "光雅盘", "mobile139": "移动云盘", "other": "其他网盘",
 }
 
 
@@ -99,12 +102,24 @@ class PanCheck:
         if not checkable:
             return links
 
-        if config.use_remote_pancheck:
-            valid = await cls._check_remote_batch(checkable)
+        # 数量保护：逐个探活成本高，超出上限的部分直接放行。
+        # 网盘聚合搜索一次可能返回数百条，全量探活会把响应拖到数秒以上。
+        max_links = config.PANCHECK_MAX_LINKS
+        if max_links <= 0:
+            return links
+        if len(checkable) > max_links:
+            check_targets = checkable[:max_links]
+            unchecked = checkable[max_links:]
         else:
-            valid = await cls._check_local_batch(checkable)
+            check_targets = checkable
+            unchecked = []
 
-        return valid + skipped
+        if config.use_remote_pancheck:
+            valid = await cls._check_remote_batch(check_targets)
+        else:
+            valid = await cls._check_local_batch(check_targets)
+
+        return valid + skipped + unchecked
 
     # ------------------------------------------------------------------
     # 模式一：远程 PanCheck 服务
@@ -268,8 +283,21 @@ class PanCheck:
         if not links:
             return []
 
-        tasks = [cls.check_url(l.get("url", ""), l.get("type", "")) for l in links]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # 关键：复用同一个 client。
+        # 早期实现为每条链接新建 AsyncClient，无法复用连接，
+        # 几十条并发时握手开销叠加会把探活拖到 2s 以上。
+        per_req = max(0.6, min(config.PANCHECK_TIMEOUT, 1.0))
+        timeout = httpx.Timeout(per_req, connect=per_req)
+
+        async with httpx.AsyncClient(
+            timeout=timeout,
+            follow_redirects=True,
+            verify=False,
+            headers=HEADERS,
+            limits=httpx.Limits(max_connections=32, max_keepalive_connections=16),
+        ) as client:
+            tasks = [cls._check_one(client, l.get("url", ""), l.get("type", "")) for l in links]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
         valid = []
         for item, res in zip(links, results):
@@ -278,13 +306,10 @@ class PanCheck:
         return valid
 
     @classmethod
-    async def check_url(cls, url: str, pan_type: str = "") -> bool:
-        """检测单个网盘链接是否有效（带缓存）"""
+    async def _check_one(cls, client: httpx.AsyncClient, url: str, pan_type: str = "") -> bool:
+        """复用传入 client 的单条探活"""
         if not url:
             return False
-        if not config.pan_check_enabled:
-            return True
-
         cached = pan_check_cache.get(url)
         if cached is not None:
             return cached
@@ -295,19 +320,32 @@ class PanCheck:
             domain = (parsed.netloc or "").lower()
             if not pan_type:
                 pan_type = cls._guess_type(domain)
-
-            timeout = httpx.Timeout(config.PANCHECK_TIMEOUT, connect=config.PANCHECK_TIMEOUT)
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True,
-                                         verify=False, headers=HEADERS) as client:
-                resp = await client.get(url)
-                text = resp.text or ""
-                is_valid = cls._judge(pan_type, resp.status_code, text)
+            resp = await client.get(url)
+            text = resp.text or ""
+            is_valid = cls._judge(pan_type, resp.status_code, text)
         except Exception:
             # 网络波动、超时一律放行，宁可多留也不误杀
             is_valid = True
 
         pan_check_cache.set(url, is_valid)
         return is_valid
+
+    @classmethod
+    async def check_url(cls, url: str, pan_type: str = "") -> bool:
+        """检测单个网盘链接是否有效（带缓存，独立调用入口）"""
+        if not url:
+            return False
+        if not config.pan_check_enabled:
+            return True
+
+        cached = pan_check_cache.get(url)
+        if cached is not None:
+            return cached
+
+        timeout = httpx.Timeout(config.PANCHECK_TIMEOUT, connect=config.PANCHECK_TIMEOUT)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True,
+                                     verify=False, headers=HEADERS) as client:
+            return await cls._check_one(client, url, pan_type)
 
     @staticmethod
     def _guess_type(domain: str) -> str:

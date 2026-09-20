@@ -21,29 +21,71 @@ class PanSouEdgeProvider(BaseProvider):
     def __init__(self, timeout: float = 3.5):
         super().__init__(name="全网盘搜聚合", enabled=config.ENABLE_PANSOU_EDGE, timeout=timeout)
 
+    # 自建节点独占等待窗口（秒）。
+    # 自建 pansou-edge 正常 <300ms；若超过这个窗口说明它异常，转公开节点兜底。
+    _SELF_HOSTED_WAIT = 1.2
+
     async def search(self, keyword: str) -> List[Dict[str, Any]]:
         if not self.enabled:
             return []
 
-        tasks = []
-
-        # ① 自建 pansou-edge（若已配置）
-        if config.PANSOU_EDGE_URL:
-            tasks.append(self._search_self_hosted(keyword))
-
-        # ② 内置公开节点兜底
-        tasks.append(self._search_public_nodes(keyword))
-
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
         all_links: List[Dict[str, Any]] = []
-        for r in results:
-            if isinstance(r, list):
-                all_links.extend(r)
+        self_task = None
+        public_task = asyncio.create_task(self._search_public_nodes(keyword))
+
+        # ① 自建 pansou-edge 优先：它快且稳定，先给它一个独占窗口。
+        #    注意 asyncio.wait 在任务完成时立即返回，不会傻等满窗口。
+        if config.PANSOU_EDGE_URL:
+            self_task = asyncio.create_task(self._search_self_hosted(keyword))
+            done, _ = await asyncio.wait({self_task}, timeout=self._SELF_HOSTED_WAIT)
+            for t in done:
+                try:
+                    r = t.result()
+                    if isinstance(r, list):
+                        all_links.extend(r)
+                except Exception:
+                    pass
+
+        # ② 自建节点已有结果 → 立刻收工，绝不等慢的公开节点。
+        #    这是关键：公开节点单次可达 4s+，若等它会被全局截止熔断一起取消，
+        #    导致已经到手的自建节点结果全部白丢。
+        if all_links:
+            await self._cancel_tasks(self_task, public_task)
+            return await self._finalize(keyword, all_links)
+
+        # ③ 自建节点无结果（或未配置）→ 等公开节点兜底，但仍受短预算约束
+        done, pending = await asyncio.wait(
+            {public_task}, timeout=max(1.0, config.SEARCH_TIMEOUT * 0.5)
+        )
+        for t in pending:
+            t.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        for t in done:
+            try:
+                r = t.result()
+                if isinstance(r, list):
+                    all_links.extend(r)
+            except Exception:
+                pass
 
         if not all_links:
             return []
 
+        return await self._finalize(keyword, all_links)
+
+    @staticmethod
+    async def _cancel_tasks(*tasks) -> None:
+        """取消未完成的任务并回收，避免留下悬挂协程"""
+        alive = [t for t in tasks if t is not None]
+        for t in alive:
+            if not t.done():
+                t.cancel()
+        if alive:
+            await asyncio.gather(*alive, return_exceptions=True)
+
+    async def _finalize(self, keyword: str, all_links: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """去重 → PanCheck 过滤 → 按网盘类型分组为 TVBox 线路"""
         # 按 URL 去重
         seen = set()
         unique: List[Dict[str, Any]] = []
@@ -53,9 +95,14 @@ class PanSouEdgeProvider(BaseProvider):
                 seen.add(u)
                 unique.append(item)
 
+        if not unique:
+            return []
+
         # PanCheck 有效性过滤
-        # 关键：给过滤加独立预算，超时则回退为「不过滤」，绝不因过滤慢而丢掉全部结果
-        budget = max(1.5, config.PANCHECK_TIMEOUT * 2)
+        # 关键：给过滤加独立预算，超时则回退为「不过滤」，绝不因过滤慢而丢掉全部结果。
+        # 网盘站探活本身较慢（部分站点甚至不可达），预算过大会白等，
+        # 因此这里压到 1.2s 以内 —— 换来的是整体响应速度。
+        budget = max(0.8, min(config.PANCHECK_TIMEOUT, 1.2))
         try:
             valid_links = await asyncio.wait_for(
                 PanCheck.filter_valid_links(unique), timeout=budget
@@ -75,19 +122,24 @@ class PanSouEdgeProvider(BaseProvider):
     # ------------------------------------------------------------------
     async def _search_self_hosted(self, keyword: str) -> List[Dict[str, Any]]:
         """
-        调用自建的 pansou-edge 节点。
-        多个候选接口「并行竞速」，谁先返回有效数据就用谁，避免串行等待拖慢整体。
+        调用自建的 pansou / pansou-edge 节点。
+
+        多个候选接口「并行竞速」，但**不能只取第一个返回的**：
+        某些参数组合（例如带 res=all）会很快返回错误或空结果，
+        若直接采用就会把真正有数据的那个候选取消掉。
+        因此这里持续等待，直到拿到**非空结果**或整体超时。
         """
         base = config.PANSOU_EDGE_URL
         headers = {"Accept": "application/json", "User-Agent": "FastBox/1.0"}
         if config.PANSOU_EDGE_TOKEN:
             headers["Authorization"] = f"Bearer {config.PANSOU_EDGE_TOKEN}"
 
+        # 顺序即优先级：第一个是实测覆盖面最广的参数组合（纯 q，不加 res）
         endpoints = [
+            (f"{base}/api/search", {"q": keyword}),
             (f"{base}/api/search", {"kw": keyword, "res": "all", "page": 1}),
             (f"{base}/api/search", {"q": keyword, "res": "all"}),
             (f"{base}/search",     {"kw": keyword}),
-            (f"{base}/api/pan/search", {"keyword": keyword}),
         ]
 
         timeout = httpx.Timeout(config.PANSOU_EDGE_TIMEOUT, connect=2.0)
@@ -96,29 +148,87 @@ class PanSouEdgeProvider(BaseProvider):
             resp = await client.get(url, params=params)
             if resp.status_code != 200:
                 return []
-            return self._parse_pansou_response(resp.json(), keyword)
+            try:
+                return self._parse_pansou_response(resp.json(), keyword)
+            except Exception:
+                return []
 
         async with httpx.AsyncClient(timeout=timeout, verify=False,
                                      follow_redirects=True, headers=headers) as client:
             tasks = [asyncio.create_task(probe(client, u, p)) for u, p in endpoints]
-            done, pending = await asyncio.wait(
-                tasks, timeout=config.PANSOU_EDGE_TIMEOUT,
-                return_when=asyncio.FIRST_COMPLETED
-            )
-            for t in pending:
-                t.cancel()
-            if pending:
-                await asyncio.gather(*pending, return_exceptions=True)
+            pending = set(tasks)
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + config.PANSOU_EDGE_TIMEOUT
 
-            for t in done:
-                try:
-                    r = t.result()
-                    if r:
-                        return r
-                except Exception:
-                    continue
+            try:
+                while pending:
+                    remaining = deadline - loop.time()
+                    if remaining <= 0:
+                        break
+                    done, pending = await asyncio.wait(
+                        pending, timeout=remaining,
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
+                    if not done:
+                        break
+                    for t in done:
+                        try:
+                            r = t.result()
+                        except Exception:
+                            continue
+                        if r:
+                            return r          # 拿到非空结果 → 立即返回
+            finally:
+                for t in pending:
+                    t.cancel()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
 
         return []
+
+    # pansou / pansou-edge 的分类键 → 本项目的内部类型名
+    # 注意：pansou 用 "aliyun"，本项目内部统一叫 "ali"
+    _PANSOU_TYPE_MAP = {
+        "quark": "quark", "aliyun": "ali", "ali": "ali", "alipan": "ali",
+        "baidu": "baidu", "uc": "uc", "xunlei": "xunlei", "115": "115",
+        "123": "123", "123pan": "123", "tianyi": "tianyi",
+        "189": "tianyi", "magnet": "magnet", "ed2k": "magnet",
+    }
+
+    @classmethod
+    def _parse_merged_by_type(cls, merged: Dict[str, Any], keyword: str) -> List[Dict[str, Any]]:
+        """
+        解析 pansou 标准返回结构：
+            data.merged_by_type = {"quark": [ {url, password, note, datetime, source}, ... ], ...}
+
+        这是 pansou / pansou-edge 最常见也最完整的格式，必须优先识别。
+        """
+        links: List[Dict[str, Any]] = []
+        for type_key, items in merged.items():
+            if not isinstance(items, list):
+                continue
+            mapped = cls._PANSOU_TYPE_MAP.get(str(type_key).strip().lower(), "")
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                u = it.get("url") or it.get("link") or it.get("share_url") or ""
+                if not u:
+                    continue
+                title = it.get("note") or it.get("title") or it.get("name") or keyword
+
+                ptype = mapped
+                if not ptype:
+                    # other / mobile 等未知分类：从 URL 反推网盘类型，兜底归入 other
+                    found = PanCheck.extract_share_info(u)
+                    ptype = found[0]["type"] if found else "other"
+
+                links.append({
+                    "type": ptype,
+                    "url": u,
+                    "pwd": it.get("password") or it.get("pwd") or "",
+                    "title": title,
+                })
+        return links
 
     @staticmethod
     def _parse_pansou_response(data: Any, keyword: str) -> List[Dict[str, Any]]:
@@ -126,6 +236,17 @@ class PanSouEdgeProvider(BaseProvider):
         links: List[Dict[str, Any]] = []
         if not isinstance(data, dict):
             return links
+
+        # ① 优先识别 pansou 标准格式：{"code":0,"data":{"merged_by_type":{...}}}
+        #    也兼容 merged_by_type 直接挂在顶层的情况
+        scope = data.get("data") if isinstance(data.get("data"), dict) else data
+        merged = scope.get("merged_by_type") if isinstance(scope, dict) else None
+        if not isinstance(merged, dict):
+            merged = data.get("merged_by_type")
+        if isinstance(merged, dict) and merged:
+            parsed = PanSouEdgeProvider._parse_merged_by_type(merged, keyword)
+            if parsed:
+                return parsed
 
         items = None
         for key in ("data", "results", "list", "items"):
@@ -256,7 +377,8 @@ class PanSouEdgeProvider(BaseProvider):
         """按网盘类型分组，每组输出一条 TVBox 线路"""
         buckets: Dict[str, List[Dict[str, str]]] = {
             "quark": [], "ali": [], "baidu": [], "uc": [],
-            "xunlei": [], "115": [], "123": [], "tianyi": [], "magnet": [], "other": [],
+            "xunlei": [], "115": [], "123": [], "tianyi": [],
+            "guangya": [], "mobile139": [], "magnet": [], "other": [],
         }
         for lk in links:
             ptype = lk.get("type", "other")
@@ -276,6 +398,8 @@ class PanSouEdgeProvider(BaseProvider):
             ("115",    "115网盘", "网盘原盘"),
             ("123",    "123网盘", "网盘资源"),
             ("tianyi", "天翼云盘", "网盘资源"),
+            ("guangya", "光雅盘", "网盘资源"),
+            ("mobile139", "移动云盘", "网盘资源"),
             ("magnet", "磁力链接", "磁力资源"),
             ("other",  "其他网盘", "网盘资源"),
         ]
