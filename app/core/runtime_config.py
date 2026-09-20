@@ -40,6 +40,7 @@ MUTABLE_SCHEMA: Dict[str, type] = {
     # 缓存
     "cache_ttl_search": int,
     "cache_ttl_douban": int,
+    "cache_ttl_truncated": int,    # 被熔断截断的结果的短 TTL（秒）
 }
 
 

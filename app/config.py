@@ -46,6 +46,9 @@ class Config:
 
     _ENV_CACHE_TTL_SEARCH = int(os.getenv("CACHE_TTL_SEARCH", "1800"))
     _ENV_CACHE_TTL_DOUBAN = int(os.getenv("CACHE_TTL_DOUBAN", "7200"))
+    # 被全局截止熔断「截断」的搜索结果，只做极短缓存，
+    # 避免一次网络抖动导致残缺结果在缓存有效期内被反复返回
+    _ENV_CACHE_TTL_TRUNCATED = int(os.getenv("CACHE_TTL_TRUNCATED", "20"))
 
     # ---- 首页模式 ----
     @property
@@ -115,6 +118,10 @@ class Config:
     @property
     def CACHE_TTL_DOUBAN(self) -> int:
         return int(runtime_store.get("cache_ttl_douban", self._ENV_CACHE_TTL_DOUBAN))
+
+    @property
+    def CACHE_TTL_TRUNCATED(self) -> int:
+        return int(runtime_store.get("cache_ttl_truncated", self._ENV_CACHE_TTL_TRUNCATED))
 
     CACHE_TTL_PAN_CHECK = int(os.getenv("CACHE_TTL_PAN_CHECK", "86400"))
 

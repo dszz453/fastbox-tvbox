@@ -93,6 +93,38 @@ async def reset_settings():
     return {"code": 200, "msg": "已恢复为环境变量默认配置"}
 
 
+@router.post("/cache/clear")
+async def clear_cache(kind: str = Query("all", description="all | search | douban | pancheck")):
+    """
+    清理内存缓存。
+
+    排查「某关键词结果不完整」时很有用：搜索结果会被缓存，
+    若某次上游抖动导致结果残缺，清一次缓存即可立即重新聚合。
+    """
+    from app.core.cache import search_cache, douban_cache, pan_check_cache
+
+    cleared: Dict[str, int] = {}
+
+    def _count(store) -> int:
+        try:
+            return len(getattr(store, "_data", {}) or {})
+        except Exception:
+            return -1
+
+    targets = {
+        "search": search_cache,
+        "douban": douban_cache,
+        "pancheck": pan_check_cache,
+    }
+
+    for name, store in targets.items():
+        if kind in ("all", name):
+            cleared[name] = _count(store)
+            store.clear()
+
+    return {"code": 200, "msg": f"已清理缓存（{kind}）", "cleared": cleared}
+
+
 # ======================================================================
 # 二、连通性测试
 # ======================================================================

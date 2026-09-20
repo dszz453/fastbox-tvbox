@@ -59,9 +59,13 @@ class Aggregator:
             ))
 
         raw_items: List[Dict[str, Any]] = []
+        truncated = False
         if tasks:
             # ---- ② 全局截止：到点即收，不等慢源 ----
             done, pending = await asyncio.wait(tasks, timeout=self.deadline)
+
+            # 仍有未完成的源 → 本次结果是「截断」的（可能缺少网盘等慢源数据）
+            truncated = bool(pending)
 
             for t in pending:
                 t.cancel()
@@ -83,9 +87,18 @@ class Aggregator:
         cost_ms = round((time.time() - start) * 1000, 2)
         print(f"[Aggregator] '{keyword}' -> {len(merged)} 部影视, "
               f"{len(raw_items)} 条线路, 耗时 {cost_ms}ms "
-              f"(截止 {self.deadline}s, 源 {len(tasks)} 个)")
+              f"(截止 {self.deadline}s, 源 {len(tasks)} 个"
+              f"{', 结果截断' if truncated else ''})")
 
-        search_cache.set(cache_key, merged, ttl=config.CACHE_TTL_SEARCH)
+        # 缓存策略：
+        #   完整结果 → 正常 TTL 长期缓存
+        #   截断结果 → 只做极短缓存，避免一次网络抖动在缓存有效期内持续返回残缺数据
+        #              （曾出现：某次搜索因熔断只拿到 3 个源，该残缺结果被缓存 30 分钟，
+        #                导致同一关键词后续请求一直缺网盘线路）
+        if truncated:
+            search_cache.set(cache_key, merged, ttl=config.CACHE_TTL_TRUNCATED)
+        else:
+            search_cache.set(cache_key, merged, ttl=config.CACHE_TTL_SEARCH)
         return merged
 
     # ------------------------------------------------------------------
