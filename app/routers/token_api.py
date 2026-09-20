@@ -8,9 +8,12 @@ from app.config import config
 
 router = APIRouter(prefix="/api", tags=["网盘密钥与配置状态"])
 
-# tokenm.json 的绝对路径
+# tokenm.json 的绝对路径（pg.jar 实际读取的位置）
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TOKEN_PATH = os.path.join(BASE_DIR, config.TOKEN_FILE.replace("/", os.sep))
+# 镜像路径：位于数据卷内（docker-compose 挂载 ./data:/app/data），
+# 容器重建后据此还原，解决「扫码保存成功、重建后又没了」的问题
+PERSIST_PATH = os.path.join(BASE_DIR, config.DATA_DIR.replace("/", os.sep), "tokenm.json")
 
 
 class TokenConfig(BaseModel):
@@ -26,28 +29,59 @@ class TokenConfig(BaseModel):
     yd_auth: Optional[str] = ""
 
 
+def _read_json(path: str) -> Optional[dict]:
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                obj = json.load(f)
+            if isinstance(obj, dict):
+                return obj
+    except Exception:
+        pass
+    return None
+
+
 def _load_token_file() -> dict:
-    if os.path.exists(TOKEN_PATH):
-        try:
-            with open(TOKEN_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    # 兜底：读取模板
+    """读取顺序：主路径 → 数据卷镜像 → 模板"""
+    for p in (TOKEN_PATH, PERSIST_PATH):
+        obj = _read_json(p)
+        if obj:
+            return obj
     tpl = os.path.join(BASE_DIR, "static", "pg", "lib", "tokentemplate.json")
-    if os.path.exists(tpl):
-        try:
-            with open(tpl, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
+    return _read_json(tpl) or {}
 
 
 def _save_token_file(data: dict) -> None:
+    """写入主路径，并镜像到数据卷，保证容器重建后凭证不丢。"""
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+
     os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
     with open(TOKEN_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write(payload)
+
+    # 镜像失败不影响主流程（例如未挂载数据卷时）
+    try:
+        os.makedirs(os.path.dirname(PERSIST_PATH), exist_ok=True)
+        with open(PERSIST_PATH, "w", encoding="utf-8") as f:
+            f.write(payload)
+    except Exception as e:
+        print(f"[Token] 镜像写入失败（不影响本次保存）: {e}")
+
+
+def ensure_token_file() -> None:
+    """启动时调用：若主路径缺失但数据卷里有备份，则还原回主路径。"""
+    if os.path.exists(TOKEN_PATH):
+        return
+    obj = _read_json(PERSIST_PATH)
+    if not obj:
+        return
+    try:
+        os.makedirs(os.path.dirname(TOKEN_PATH), exist_ok=True)
+        with open(TOKEN_PATH, "w", encoding="utf-8") as f:
+            json.dump(obj, f, ensure_ascii=False, indent=2)
+        print(f"[Token] 已从数据卷还原凭证 -> {TOKEN_PATH}")
+    except Exception as e:
+        print(f"[Token] 还原失败: {e}")
 
 
 def apply_env_tokens() -> None:
@@ -121,6 +155,7 @@ async def get_token_config():
             "uc_cookie": mask(data.get("uc_cookie", "")),
         },
         "path": TOKEN_PATH,
+        "persist_path": PERSIST_PATH,
     }
 
 

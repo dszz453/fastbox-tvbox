@@ -10,7 +10,11 @@ from app.routers.tvbox import router as tvbox_router
 from app.routers.vod import router as vod_router
 from app.routers.douban_api import router as douban_router
 from app.routers.search import router as search_router
-from app.routers.token_api import router as token_router, apply_env_tokens
+from app.routers.token_api import (
+    router as token_router,
+    apply_env_tokens,
+    ensure_token_file,
+)
 from app.routers.config_api import router as config_router
 
 app = FastAPI(
@@ -56,7 +60,11 @@ async def health_check():
 
 @app.on_event("startup")
 async def _startup():
-    """启动时把环境变量中的网盘密钥写入 tokenm.json"""
+    """启动时恢复数据卷中的网盘凭证，并把环境变量里的密钥写入 tokenm.json"""
+    try:
+        ensure_token_file()
+    except Exception as e:
+        print(f"[Startup] ensure_token_file failed: {e}")
     try:
         apply_env_tokens()
     except Exception as e:

@@ -37,6 +37,12 @@ HEADERS = {
 }
 
 # 扫码会话缓存: sid -> {ck, t, created_at}
+#
+# ⚠️ 重要：uvicorn 以 --workers N 运行时，每个 worker 是独立进程、内存互不共享。
+#    若只把会话存在这里，generate 落在 worker A、poll 落到 worker B 就会「查不到会话」，
+#    前端会误判成「二维码已过期」并停止轮询 —— 这正是「扫码保存不了」的根因。
+#    因此本字典仅作为「本进程加速缓存」，真正的会话状态由 state 参数在客户端往返携带，
+#    保证任意 worker 都能还原会话（见 _encode_state / _decode_state）。
 _SESSIONS: Dict[str, Dict[str, Any]] = {}
 SESSION_TTL = 300  # 5 分钟
 
@@ -45,6 +51,32 @@ def _cleanup_sessions() -> None:
     now = time.time()
     for k in [k for k, v in _SESSIONS.items() if now - v.get("created_at", 0) > SESSION_TTL]:
         _SESSIONS.pop(k, None)
+
+
+def _encode_state(ck: str, t: str) -> str:
+    """把 ck/t 打包成不透明字符串，交前端在轮询时原样带回。
+
+    这样无论请求被哪个 worker 进程处理都能还原会话，彻底规避多进程内存隔离问题。
+    ck/t 属于一次性的登录会话参数，非长期密钥，随请求往返是安全的。
+    """
+    raw = json.dumps({"ck": ck, "t": t}, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _decode_state(state: str) -> Optional[Dict[str, Any]]:
+    """还原前端带回的 state；非法输入一律返回 None。"""
+    if not state:
+        return None
+    try:
+        pad = "=" * (-len(state) % 4)
+        raw = base64.urlsafe_b64decode(state + pad).decode("utf-8", "ignore")
+        obj = json.loads(raw)
+        ck, t = obj.get("ck"), obj.get("t")
+        if ck:
+            return {"ck": ck, "t": t, "created_at": time.time()}
+    except Exception:
+        pass
+    return None
 
 
 async def generate_qr(sid: str) -> Dict[str, Any]:
@@ -72,17 +104,26 @@ async def generate_qr(sid: str) -> Dict[str, Any]:
     return {
         "qr_content": qr_content,   # 前端把它渲染成二维码图片
         "sid": sid,
+        "state": _encode_state(ck, t),   # 轮询时必须原样带回，保证多 worker 下会话不丢
         "expires_in": SESSION_TTL,
     }
 
 
-async def poll_qr(sid: str) -> Dict[str, Any]:
-    """轮询扫码状态"""
+async def poll_qr(sid: str, state: str = "") -> Dict[str, Any]:
+    """轮询扫码状态
+
+    state 为 generate 阶段下发的会话凭证，用于在「本进程没有该 sid」时还原会话。
+    """
     _cleanup_sessions()
 
-    sess = _SESSIONS.get(sid)
+    # ① 优先本进程缓存；② 回退到前端带回的 state（跨 worker 场景）
+    sess = _SESSIONS.get(sid) or _decode_state(state)
     if not sess:
-        return {"status": "EXPIRED", "message": "二维码已过期，请刷新重试"}
+        # 注意：这里刻意不用 EXPIRED，避免前端把它当成「二维码过期」而停止轮询
+        return {"status": "NOTFOUND", "message": "会话已失效，请点击刷新二维码"}
+
+    # 让本进程也记住，后续轮询更快
+    _SESSIONS[sid] = sess
 
     params = dict(COMMON_PARAMS)
     params.update({"ck": sess["ck"], "t": sess["t"]})

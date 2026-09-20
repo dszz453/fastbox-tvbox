@@ -261,10 +261,15 @@ FastBox 同时遵循标准 MacCMS V10 (VOD) 协议，可直接作为一个独立
 - **测试 PanCheck 连通性**：`POST /api/settings/test/pancheck?url=...`
 - **网盘密钥读取（脱敏）**：`GET /api/token`
 - **网盘密钥保存**：`POST /api/token`
-- **阿里云盘扫码—生成二维码**：`POST /api/qr/aliyun/generate`
-- **阿里云盘扫码—轮询状态**：`GET /api/qr/aliyun/poll?sid=...`
+- **阿里云盘扫码—生成二维码**：`POST /api/qr/aliyun/generate`（返回 `sid` 与 `state`）
+- **阿里云盘扫码—轮询状态**：`GET /api/qr/aliyun/poll?sid=...&state=...`
+  （`state` 必须原样回传，用于在多 worker 部署下跨进程还原会话）
 - **阿里云盘扫码—保存凭证**：`POST /api/qr/aliyun/save`
 - **其他网盘手机填写页**：`GET /api/qr/mobile/{quark|uc|115|thunder|pikpak}`
+
+> ⚠️ 调用方注意：`/api/qr/aliyun/poll` 的 `state` 参数不可省略。
+> 省略后若请求被负载均衡到另一个 worker 进程，会返回 `NOTFOUND`（旧版本返回 `EXPIRED`），
+> 导致「扫码成功却保存不了」。
 
 
 ---
@@ -323,11 +328,29 @@ A：FastBox 采用动态 Host 解析设计，只要你通过 `http://your-domain
 **Q4：网盘密钥一定要配置吗？**  
 A：**不需要**。不配置任何网盘密钥，依然可以正常使用 7 大免网盘切片秒播源（暴风、量子、红牛等），点开即播。配置网盘密钥只是为了额外解锁「网盘 4K 原盘」这类高码率资源。
 
-**Q5：阿里云盘扫码提示「二维码已过期」怎么办？**  
-A：二维码有效期约 5 分钟。点击弹窗里的「刷新二维码」重新生成即可。若扫码接口因官方调整持续失败，可改用「手动填写 open_token」。
+**Q5：阿里云盘扫码提示「二维码已过期」/ 扫码后保存不了怎么办？**  
+A：二维码有效期约 5 分钟，过期后点击弹窗里的「刷新二维码」重新生成即可。
+
+> **v1.1 已修复**：早期版本把扫码会话存在单个进程内存中，而服务以 `--workers 2` 多进程运行，
+> 轮询请求一旦落到另一个 worker 就会误报「二维码已过期」并停止轮询（实测 20 次轮询中 8 次误报）。
+> 现已改为**无状态会话**：生成二维码时下发 `state`，轮询时原样回传即可跨进程还原，
+> 并新增「连续 3 次异常才判定过期」的容错。如果你仍遇到该问题，请确认镜像已更新到最新版。
+
+若扫码接口因官方调整持续失败，可改用「手动填写 open_token」。
 
 **Q6：网页上改的配置，重启容器后会丢吗？**  
 A：不会。配置写入 `data/runtime_config.json`。只要 `docker-compose.yml` 中保留了 `- ./data:/app/data` 这行卷挂载，重启后配置依然生效。
+
+**Q6-1：扫码保存的网盘凭证，容器重建后会丢吗？**  
+A：**不会（v1.1 起）**。凭证会同时写入两处：
+
+| 位置 | 作用 |
+| --- | --- |
+| `/app/static/pg/lib/tokenm.json` | pg.jar 实际读取的主文件 |
+| `/app/data/tokenm.json` | 数据卷内的持久化镜像 |
+
+容器启动时会自动从数据卷还原主文件，因此 `docker compose up -d --force-recreate`、
+重新拉取镜像等操作都不会丢失扫码结果（前提仍是挂载了 `- ./data:/app/data`）。
 
 **Q7：`auto` / `remote` / `local` / `off` 四种 PanCheck 模式怎么选？**  
 A：一般保持 `auto` 即可（配了地址就走远程，没配就用内置）。如果你追求极致速度、不在乎少量死链，选 `off`；如果已部署 PanCheck 且要求最准，选 `remote`。

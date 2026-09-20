@@ -127,7 +127,10 @@ class Config:
 
     # ==================== ② 网盘播放密钥（扫码/网页配置） ====================
     # 密钥实际存储在 tokenm.json 中，这里仅保留文件路径等启动期参数
+    # 主路径（pg.jar 会直接读取该文件，不能随意改动）
     TOKEN_FILE = _env_str("TOKEN_FILE", "static/pg/lib/tokenm.json")
+    # 持久化目录：位于挂载卷内，容器重建后凭证不丢
+    DATA_DIR = _env_str("DATA_DIR", "data")
 
     # 以下为环境变量兜底（容器启动时若检测到则写入 tokenm.json）
     ALI_TOKEN = _env_str("ALI_TOKEN")

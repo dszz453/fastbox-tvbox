@@ -389,7 +389,7 @@ header{background:rgba(22,27,34,.88);backdrop-filter:blur(12px);
 
 <script>
 let currentMode = 'douban';
-let qrPollTimer = null, qrSid = null, qrKind = '';
+let qrPollTimer = null, qrSid = null, qrKind = '', qrState = '';
 let tokenStatus = {};
 
 function showToast(msg, isErr){
@@ -625,37 +625,55 @@ async function startAliyunQr(){
     const j = await r.json();
     if (j.code !== 200){ setQrStatus(j.detail || '生成失败', 'var(--err)'); return; }
     qrSid = j.data.sid;
+    qrState = j.data.state || '';
     renderQrInto(j.data.qr_content);
     setQrStatus('等待扫码…');
 
+    // 连续异常计数：避免服务多进程/网络抖动导致的单次误报直接中断轮询
+    let badTicks = 0;
     qrPollTimer = setInterval(async ()=>{
       try{
-        const pr = await fetch('/api/qr/aliyun/poll?sid=' + qrSid);
+        const pr = await fetch('/api/qr/aliyun/poll?sid=' + encodeURIComponent(qrSid) +
+                               '&state=' + encodeURIComponent(qrState));
         const pj = await pr.json();
         const d = pj.data || {};
-        if (d.status === 'WAITING'){ setQrStatus('等待扫码…'); }
-        else if (d.status === 'SCANNED'){ setQrStatus('已扫码，请在手机上点击确认', 'var(--warn)'); }
+        if (d.status === 'WAITING'){ badTicks = 0; setQrStatus('等待扫码…'); }
+        else if (d.status === 'SCANNED'){ badTicks = 0; setQrStatus('已扫码，请在手机上点击确认', 'var(--warn)'); }
         else if (d.status === 'CONFIRMED'){
           clearInterval(qrPollTimer); qrPollTimer = null;
           setQrStatus('登录成功，正在保存凭证…', 'var(--ok)');
           const sr = await fetch('/api/qr/aliyun/save', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({refresh_token: d.refresh_token || ''})
+            body: JSON.stringify({refresh_token: d.refresh_token || '', access_token: d.access_token || ''})
           });
-          const sj = await sr.json();
-          if (sj.code === 200){
+          let sj = {};
+          try{ sj = await sr.json(); }catch(e){ sj = {}; }
+          if (sr.ok && sj.code === 200){
             setQrStatus('✅ ' + sj.msg + (sj.data && sj.data.hint ? '（' + sj.data.hint + '）' : ''), 'var(--ok)');
             showToast('阿里云盘登录成功！');
             loadTokenStatus();
             setTimeout(closeQrModal, 1800);
-          } else { setQrStatus(sj.detail || '保存失败', 'var(--err)'); }
+          } else {
+            setQrStatus('保存失败：' + (sj.detail || sj.msg || ('HTTP ' + sr.status)), 'var(--err)');
+          }
         }
-        else if (d.status === 'EXPIRED'){
-          setQrStatus('二维码已过期，请点击刷新', 'var(--err)');
+        else if (d.status === 'EXPIRED' || d.status === 'NOTFOUND'){
+          badTicks++;
+          if (badTicks >= 3){
+            setQrStatus('二维码已过期，请点击刷新', 'var(--err)');
+            clearInterval(qrPollTimer); qrPollTimer = null;
+          } else {
+            setQrStatus('连接抖动，重试中…', 'var(--warn)');
+          }
+        }
+        else { badTicks = 0; setQrStatus(d.message || '状态未知'); }
+      }catch(e){
+        badTicks++;
+        if (badTicks >= 5){
+          setQrStatus('轮询失败，请检查网络后点击刷新', 'var(--err)');
           clearInterval(qrPollTimer); qrPollTimer = null;
         }
-        else { setQrStatus(d.message || '状态未知'); }
-      }catch(e){ /* 忽略单次轮询异常 */ }
+      }
     }, 2000);
   }catch(e){ setQrStatus('生成失败：' + e.message, 'var(--err)'); }
 }

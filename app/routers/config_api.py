@@ -208,10 +208,13 @@ async def aliyun_qr_generate():
 
 
 @router.get("/qr/aliyun/poll")
-async def aliyun_qr_poll(sid: str = Query(...)):
-    """轮询扫码状态"""
+async def aliyun_qr_poll(sid: str = Query(...), state: str = Query("")):
+    """轮询扫码状态
+
+    state 由 /qr/aliyun/generate 下发，用于多 worker 部署下跨进程还原会话。
+    """
     try:
-        data = await aliyun_qr.poll_qr(sid)
+        data = await aliyun_qr.poll_qr(sid, state)
         return {"code": 200, "data": data}
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"轮询失败: {e}")
@@ -320,23 +323,38 @@ async def mobile_fill_page(kind: str):
   <h1>{meta['title']}</h1>
   <div class="tip">{meta['tip']}</div>
   <textarea id="val" placeholder="{meta['placeholder']}"></textarea>
-  <button onclick="save()">保存到服务器</button>
+  <button id="btn" onclick="save()">保存到服务器</button>
   <div class="ok" id="msg"></div>
 <script>
 async function save() {{
   const v = document.getElementById('val').value.trim();
-  if (!v) {{ document.getElementById('msg').textContent = '内容不能为空'; return; }}
-  document.getElementById('msg').textContent = '保存中…';
+  const msg = document.getElementById('msg');
+  const btn = document.getElementById('btn');
+  if (!v) {{ msg.style.color = '#f85149'; msg.textContent = '内容不能为空'; return; }}
+  btn.disabled = true;
+  msg.style.color = '#8b949e';
+  msg.textContent = '保存中…';
   try {{
     const body = {{}}; body['{meta['field']}'] = v;
     const r = await fetch('/api/token', {{
       method:'POST', headers:{{'Content-Type':'application/json'}},
       body: JSON.stringify(body)
     }});
-    const j = await r.json();
-    document.getElementById('msg').textContent = j.msg || '保存成功！可以关闭本页了';
+    let j = {{}};
+    try {{ j = await r.json(); }} catch (e) {{ j = {{}}; }}
+    if (r.ok && j.code === 200) {{
+      msg.style.color = '#3fb950';
+      msg.textContent = j.msg || '保存成功！可以关闭本页了';
+      document.getElementById('val').value = '';
+    }} else {{
+      msg.style.color = '#f85149';
+      msg.textContent = '保存失败：' + (j.detail || j.msg || ('HTTP ' + r.status));
+    }}
   }} catch(e) {{
-    document.getElementById('msg').textContent = '保存失败: ' + e.message;
+    msg.style.color = '#f85149';
+    msg.textContent = '保存失败: ' + e.message;
+  }} finally {{
+    btn.disabled = false;
   }}
 }}
 </script>
