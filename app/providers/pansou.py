@@ -22,8 +22,9 @@ class PanSouEdgeProvider(BaseProvider):
         super().__init__(name="全网盘搜聚合", enabled=config.ENABLE_PANSOU_EDGE, timeout=timeout)
 
     # 自建节点独占等待窗口（秒）。
-    # 自建 pansou-edge 正常 <300ms；若超过这个窗口说明它异常，转公开节点兜底。
-    _SELF_HOSTED_WAIT = 1.2
+    # 自建 pansou-edge 正常 <900ms；若超过这个窗口说明它异常，转公开节点兜底。
+    # 注意：窗口耗尽后 self_task 不会被丢弃，仍会参与第 ③ 步的兜底竞速。
+    _SELF_HOSTED_WAIT = 1.5
 
     async def search(self, keyword: str) -> List[Dict[str, Any]]:
         if not self.enabled:
@@ -35,7 +36,7 @@ class PanSouEdgeProvider(BaseProvider):
 
         # ① 自建 pansou-edge 优先：它快且稳定，先给它一个独占窗口。
         #    注意 asyncio.wait 在任务完成时立即返回，不会傻等满窗口。
-        if config.PANSOU_EDGE_URL:
+        if config.PANSOU_EDGE_URLS:
             self_task = asyncio.create_task(self._search_self_hosted(keyword))
             done, _ = await asyncio.wait({self_task}, timeout=self._SELF_HOSTED_WAIT)
             for t in done:
@@ -53,9 +54,12 @@ class PanSouEdgeProvider(BaseProvider):
             await self._cancel_tasks(self_task, public_task)
             return await self._finalize(keyword, all_links)
 
-        # ③ 自建节点无结果（或未配置）→ 等公开节点兜底，但仍受短预算约束
+        # ③ 自建节点没在窗口内出结果 → 再给「自建 + 公开」一个短兜底预算。
+        #    注意这里把 self_task 也一起等：它可能只是慢了一点点，
+        #    直接取消掉太浪费；两个都等，谁先出结果就用谁。
+        fallback = {t for t in (self_task, public_task) if t is not None}
         done, pending = await asyncio.wait(
-            {public_task}, timeout=max(1.0, config.SEARCH_TIMEOUT * 0.5)
+            fallback, timeout=max(1.0, config.SEARCH_TIMEOUT * 0.5)
         )
         for t in pending:
             t.cancel()
@@ -124,23 +128,32 @@ class PanSouEdgeProvider(BaseProvider):
         """
         调用自建的 pansou / pansou-edge 节点。
 
-        多个候选接口「并行竞速」，但**不能只取第一个返回的**：
+        **支持配置多个候选地址**（PANSOU_EDGE_URL 用逗号分隔）。
+        所有地址的所有候选接口「并行竞速」，但**不能只取第一个返回的**：
         某些参数组合（例如带 res=all）会很快返回错误或空结果，
         若直接采用就会把真正有数据的那个候选取消掉。
         因此这里持续等待，直到拿到**非空结果**或整体超时。
+
+        这样即使某个地址写错 / 被墙 / 服务挂了，其他地址仍能兜底，
+        不会出现「网盘一条都搜不到」的整段失效。
         """
-        base = config.PANSOU_EDGE_URL
+        bases = config.PANSOU_EDGE_URLS
+        if not bases:
+            return []
+
         headers = {"Accept": "application/json", "User-Agent": "FastBox/1.0"}
         if config.PANSOU_EDGE_TOKEN:
             headers["Authorization"] = f"Bearer {config.PANSOU_EDGE_TOKEN}"
 
         # 顺序即优先级：第一个是实测覆盖面最广的参数组合（纯 q，不加 res）
-        endpoints = [
-            (f"{base}/api/search", {"q": keyword}),
-            (f"{base}/api/search", {"kw": keyword, "res": "all", "page": 1}),
-            (f"{base}/api/search", {"q": keyword, "res": "all"}),
-            (f"{base}/search",     {"kw": keyword}),
-        ]
+        endpoints = []
+        for base in bases:
+            endpoints.extend([
+                (f"{base}/api/search", {"q": keyword}),
+                (f"{base}/api/search", {"kw": keyword, "res": "all", "page": 1}),
+                (f"{base}/api/search", {"q": keyword, "res": "all"}),
+                (f"{base}/search",     {"kw": keyword}),
+            ])
 
         timeout = httpx.Timeout(config.PANSOU_EDGE_TIMEOUT, connect=2.0)
 
@@ -184,6 +197,9 @@ class PanSouEdgeProvider(BaseProvider):
                 if pending:
                     await asyncio.gather(*pending, return_exceptions=True)
 
+        # 所有候选地址都没拿到结果 —— 打日志便于排查（是地址写错？还是服务挂了？）
+        print(f"[pansou] 自建节点无结果 keyword={keyword!r} "
+              f"候选地址={bases} 超时={config.PANSOU_EDGE_TIMEOUT}s")
         return []
 
     # pansou / pansou-edge 的分类键 → 本项目的内部类型名

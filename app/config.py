@@ -1,4 +1,6 @@
 import os
+from typing import List
+
 from app.core.runtime_config import runtime_store
 
 
@@ -80,6 +82,24 @@ class Config:
     @property
     def PANSOU_EDGE_URL(self) -> str:
         return str(runtime_store.get("pansou_edge_url", self._ENV_PANSOU_EDGE_URL)).rstrip("/")
+
+    @property
+    def PANSOU_EDGE_URLS(self) -> List[str]:
+        """解析 PANSOU_EDGE_URL 为候选地址列表。
+
+        支持用逗号/分号/空白分隔多个地址，例如：
+            http://pansou-app:80,https://pansou.dszz.qzz.io
+
+        多个地址会**并行竞速**，先返回非空结果者胜出，其余自动兜底。
+        这样即使其中某个地址写错、被墙或服务挂了，网盘搜索依然可用。
+        """
+        raw = self.PANSOU_EDGE_URL or ""
+        urls: List[str] = []
+        for part in raw.replace(";", ",").replace("\n", ",").split(","):
+            u = part.strip().rstrip("/")
+            if u and u not in urls:
+                urls.append(u)
+        return urls
 
     @property
     def PANSOU_EDGE_TOKEN(self) -> str:

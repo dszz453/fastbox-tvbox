@@ -1,10 +1,14 @@
 import asyncio
+import re
 import time
 from typing import List, Dict, Any, Tuple
 from app.config import config
 from app.core.cache import search_cache
 from app.providers.collectors import COLLECTOR_STATIONS, CollectorProvider
 from app.providers.pansou import PanSouEdgeProvider
+
+# 网盘线路标题形如「【夸克4K原盘】繁花」，前缀是网盘来源名
+_PAN_TITLE_PREFIX = re.compile(r"^【[^】]*】\s*")
 
 
 class Aggregator:
@@ -102,36 +106,38 @@ class Aggregator:
         return merged
 
     # ------------------------------------------------------------------
-    def _merge_results(self, keyword: str, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """按影视标题聚合线路：一个影片一张卡片，内部含多条播放线路"""
-        grouped: Dict[str, Dict[str, Any]] = {}
+    @staticmethod
+    def _clean_title(title: str) -> str:
+        return (title.replace("【", "").replace("】", "")
+                     .replace("（", "").replace("）", "").strip())
 
+    @staticmethod
+    def _pan_keyword(title: str) -> str:
+        """从「【夸克4K原盘】繁花」里取出「繁花」"""
+        return _PAN_TITLE_PREFIX.sub("", (title or "").strip()).strip()
+
+    def _merge_results(self, keyword: str, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """按影视标题聚合线路：一个影片一张卡片，内部含多条播放线路
+
+        网盘结果（type == "pan"）会**优先并入同名的影视卡片**，成为该影片的额外线路，
+        这样用户在 TVBox 里点开《繁花》就能同时看到「切片秒播」和「夸克/阿里网盘」两类线路，
+        不必在几十条搜索结果里翻找网盘专属卡片。
+        若没有同名影视卡片（例如只有网盘有这部片），才单独成条。
+        """
+        grouped: Dict[str, Dict[str, Any]] = {}
+        pan_items: List[Dict[str, Any]] = []
+
+        # ---- ① 先聚合切片站结果 ----
         for item in items:
             title = (item.get("title") or "").strip()
             if not title:
                 continue
 
             if item.get("type") == "pan":
-                # 网盘专属卡片，独立成条
-                key = f"__pan__{title}"
-                grouped[key] = {
-                    "vod_id": item.get("vod_id"),
-                    "vod_name": title,
-                    "vod_pic": item.get("poster", ""),
-                    "vod_remarks": item.get("remarks", "网盘资源"),
-                    "vod_year": item.get("year", ""),
-                    "vod_actor": "",
-                    "vod_director": "",
-                    "vod_content": f"由 {item.get('source')} 提供的网盘资源",
-                    "sources": [{
-                        "source_name": item.get("source"),
-                        "episodes": item.get("episodes", []),
-                    }],
-                }
+                pan_items.append(item)
                 continue
 
-            clean = (title.replace("【", "").replace("】", "")
-                          .replace("（", "").replace("）", "").strip())
+            clean = self._clean_title(title)
             if clean not in grouped:
                 grouped[clean] = {
                     "vod_id": item.get("vod_id"),
@@ -148,6 +154,54 @@ class Aggregator:
                 "source_name": item.get("source"),
                 "episodes": item.get("episodes", []),
             })
+
+        # ---- ② 网盘结果：能对上同名影视就并入，否则独立成条 ----
+        pan_ep_total: Dict[str, int] = {}   # clean_key -> 并入的网盘资源总数
+
+        for item in pan_items:
+            title = (item.get("title") or "").strip()
+            if not title:
+                continue
+
+            pan_kw = self._pan_keyword(title)
+            clean_kw = self._clean_title(pan_kw)
+            target = grouped.get(clean_kw)
+
+            if target is not None:
+                # 并入主卡片，成为一条额外线路
+                target["sources"].append({
+                    "source_name": item.get("source"),
+                    "episodes": item.get("episodes", []),
+                })
+                pan_ep_total[clean_kw] = (
+                    pan_ep_total.get(clean_kw, 0) + len(item.get("episodes") or [])
+                )
+                continue
+
+            # 没有同名影视 → 保持独立卡片
+            key = f"__pan__{title}"
+            grouped[key] = {
+                "vod_id": item.get("vod_id"),
+                "vod_name": title,
+                "vod_pic": item.get("poster", ""),
+                "vod_remarks": item.get("remarks", "网盘资源"),
+                "vod_year": item.get("year", ""),
+                "vod_actor": "",
+                "vod_director": "",
+                "vod_content": f"由 {item.get('source')} 提供的网盘资源",
+                "sources": [{
+                    "source_name": item.get("source"),
+                    "episodes": item.get("episodes", []),
+                }],
+            }
+
+        # 统一回写「含 N 个网盘资源」备注，方便用户一眼看出哪部片有网盘线路
+        for clean_kw, n in pan_ep_total.items():
+            g = grouped.get(clean_kw)
+            if g is None or n <= 0:
+                continue
+            base = str(g.get("vod_remarks") or "").strip()
+            g["vod_remarks"] = f"{base} · 含{n}个网盘资源" if base else f"含{n}个网盘资源"
 
         res = list(grouped.values())
 

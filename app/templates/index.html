@@ -263,14 +263,18 @@ header{background:rgba(22,27,34,.88);backdrop-filter:blur(12px);
         <div id="pansouState" style="font-size:12px;color:var(--muted)"></div>
       </div>
       <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.8">
-        填写你自建的 <b>pansou-edge</b>（Cloudflare Worker）地址，可获得更快的盘搜速度与更稳定的结果。
-        留空则使用内置公开节点。
+        填写你自建的 <b>pansou</b> / <b>pansou-edge</b> 服务地址，可获得更快的盘搜速度与更稳定的结果。
+        留空则使用内置公开节点。<br>
+        <b>支持填多个地址</b>（用英文逗号分隔），会并行竞速、互为兜底 ——
+        例如本机容器 + 云端 Worker 各填一个，任一可用就不会出现「搜不到网盘资源」。
+        <br><span style="color:var(--warn)">注意：这里保存的值<b>优先级高于 docker-compose 里的环境变量</b>，
+        改错了会覆盖掉容器里的正确配置。</span>
       </div>
       <div class="grid2">
         <div class="field">
-          <label>pansou-edge 服务地址</label>
-          <input type="text" id="set_pansou_edge_url" placeholder="https://pansou-edge.xxx.workers.dev">
-          <div class="hint">不要带结尾斜杠，例如 https://pansou.yourdomain.com</div>
+          <label>pansou 服务地址（可多个，逗号分隔）</label>
+          <input type="text" id="set_pansou_edge_url" placeholder="http://pansou-app:80,https://pansou-edge.xxx.workers.dev">
+          <div class="hint">不带结尾斜杠；同机容器可直接写容器名，如 http://pansou-app:80</div>
         </div>
         <div class="field">
           <label>访问鉴权 Token（可选）</label>
@@ -279,7 +283,7 @@ header{background:rgba(22,27,34,.88);backdrop-filter:blur(12px);
         </div>
       </div>
       <div class="row-actions">
-        <button class="btn btn-ghost btn-sm" onclick="testPansou()">🔌 测试连接</button>
+        <button class="btn btn-ghost btn-sm" onclick="testPansou()">🔌 测试连接（逐个地址 + 实测条数）</button>
         <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" id="set_enable_pansou_edge"> 启用网盘聚合搜索
         </label>
@@ -749,11 +753,18 @@ function showTestResult(elId, ok, msg, detail){
 async function testPansou(){
   const url = document.getElementById('set_pansou_edge_url').value.trim();
   if (!url){ showTestResult('pansouTest', false, '请先填写 pansou-edge 地址'); return; }
-  showTestResult('pansouTest', true, '正在测试连接…');
+  showTestResult('pansouTest', true, '正在逐个测试地址…');
   try{
     const r = await fetch('/api/settings/test/pansou?url=' + encodeURIComponent(url), {method:'POST'});
     const j = await r.json();
-    showTestResult('pansouTest', !!j.ok, j.msg, (j.tried||[]).join(' | '));
+    const lines = (j.results || []).map(function(e){
+      const flag = (e.ok && e.hits > 0) ? '✅' : (e.ok ? '⚠️' : '❌');
+      const tail = e.ok
+        ? (e.ms + 'ms，' + e.hits + ' 条')
+        : (e.detail || '无法连接');
+      return flag + ' ' + e.url + ' — ' + tail;
+    });
+    showTestResult('pansouTest', !!j.ok, j.msg, lines.join('<br>'));
   }catch(e){ showTestResult('pansouTest', false, '测试失败', e.message); }
 }
 

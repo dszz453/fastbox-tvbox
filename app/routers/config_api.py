@@ -129,11 +129,35 @@ async def clear_cache(kind: str = Query("all", description="all | search | douba
 # 二、连通性测试
 # ======================================================================
 
+def _count_pansou_hits(body: Any) -> int:
+    """数一数 pansou 返回体里到底有多少条结果（兼容多种结构）"""
+    if not isinstance(body, (dict, list)):
+        return 0
+    if isinstance(body, list):
+        return len(body)
+    scope = body.get("data") if isinstance(body.get("data"), dict) else body
+    if not isinstance(scope, dict):
+        return 0
+    merged = scope.get("merged_by_type")
+    if isinstance(merged, dict):
+        return sum(len(v) for v in merged.values() if isinstance(v, list))
+    for k in ("list", "items", "results"):
+        v = scope.get(k)
+        if isinstance(v, list):
+            return len(v)
+    return 0
+
+
 @router.post("/settings/test/pansou")
 async def test_pansou(url: Optional[str] = None, token: Optional[str] = None):
-    """测试 pansou-edge 自建节点是否可用"""
-    target = (url or config.PANSOU_EDGE_URL).rstrip("/")
-    if not target:
+    """测试 pansou-edge 节点是否可用
+
+    支持**逗号分隔的多个地址**，逐个测试并报告每个地址的
+    连通性、耗时和**实际检索到的结果条数** —— 只通但搜不到数据也会被识别出来。
+    """
+    raw = url if url is not None else config.PANSOU_EDGE_URL
+    targets = [u.strip().rstrip("/") for u in (raw or "").replace(";", ",").split(",") if u.strip()]
+    if not targets:
         return {"code": 400, "ok": False, "msg": "尚未填写 pansou-edge 地址"}
 
     headers = {"Accept": "application/json", "User-Agent": "FastBox/1.0"}
@@ -141,28 +165,62 @@ async def test_pansou(url: Optional[str] = None, token: Optional[str] = None):
     if tk:
         headers["Authorization"] = f"Bearer {tk}"
 
-    tried = []
+    candidates = (
+        ("/api/search", {"q": "测试"}),
+        ("/api/search", {"kw": "测试", "res": "all", "page": 1}),
+        ("/search",     {"kw": "测试"}),
+        ("/api/health", {}),
+        ("/health",     {}),
+        ("/",           {}),
+    )
+
+    results = []
     async with httpx.AsyncClient(timeout=8.0, verify=False,
                                  follow_redirects=True, headers=headers) as client:
-        for path in ("/api/search", "/search", "/api/health", "/health", "/"):
-            u = target + path
-            try:
-                params = {"kw": "测试", "q": "测试"} if "search" in path else {}
-                r = await client.get(u, params=params)
-                tried.append(f"{path} -> HTTP {r.status_code}")
-                if r.status_code == 200:
-                    body = r.text[:200]
-                    is_json = body.strip().startswith("{") or body.strip().startswith("[")
-                    return {
-                        "code": 200, "ok": True,
-                        "msg": f"连接成功（{path}）",
-                        "detail": f"HTTP 200，返回{'JSON' if is_json else '非JSON'}数据",
-                        "tried": tried,
-                    }
-            except Exception as e:
-                tried.append(f"{path} -> {type(e).__name__}")
+        for target in targets:
+            entry: Dict[str, Any] = {"url": target, "ok": False, "hits": 0,
+                                     "ms": 0, "detail": ""}
+            t0 = time.time()
+            for path, params in candidates:
+                try:
+                    r = await client.get(target + path, params=params)
+                except Exception as e:
+                    entry["detail"] = f"{path} -> {type(e).__name__}"
+                    continue
+                if r.status_code != 200:
+                    entry["detail"] = f"{path} -> HTTP {r.status_code}"
+                    continue
 
-    return {"code": 200, "ok": False, "msg": "无法连接到该地址，请检查 URL / 网络 / 鉴权", "tried": tried}
+                entry["ok"] = True
+                entry["ms"] = int((time.time() - t0) * 1000)
+                entry["detail"] = f"{path} -> HTTP 200"
+
+                if "search" in path:
+                    try:
+                        hits = _count_pansou_hits(r.json())
+                    except Exception:
+                        hits = 0
+                    entry["hits"] = hits
+                    if hits == 0:
+                        entry["detail"] += "（连通但无结果，继续试其他端点）"
+                        continue
+                break
+            results.append(entry)
+
+    good = [e for e in results if e["ok"] and e["hits"] > 0]
+    alive = [e for e in results if e["ok"]]
+
+    if good:
+        best = min(good, key=lambda e: e["ms"])
+        msg = (f"✅ {len(good)}/{len(results)} 个地址可正常检索"
+               f"（最快：{best['url']}，{best['ms']}ms，{best['hits']} 条）")
+    elif alive:
+        msg = "⚠️ 地址能连通，但都搜不到结果 —— 检查地址是否指向 pansou 服务本身"
+    else:
+        msg = "❌ 所有地址都无法连接，请检查 URL / 网络 / 鉴权"
+
+    return {"code": 200, "ok": bool(good), "msg": msg,
+            "detail": f"共测试 {len(results)} 个地址", "results": results}
 
 
 @router.post("/settings/test/pancheck")

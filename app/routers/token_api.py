@@ -225,6 +225,8 @@ async def config_status():
             "pansou_edge": {
                 "启用": config.ENABLE_PANSOU_EDGE,
                 "自建地址": config.PANSOU_EDGE_URL or "（未配置，使用内置公开节点）",
+                "候选地址数": len(config.PANSOU_EDGE_URLS),
+                "候选地址列表": config.PANSOU_EDGE_URLS or [],
                 "鉴权Token": "已配置" if config.PANSOU_EDGE_TOKEN else "未配置",
                 "超时(秒)": config.PANSOU_EDGE_TIMEOUT,
             },
