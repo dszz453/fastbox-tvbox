@@ -28,8 +28,12 @@ services:
       - CACHE_TTL_DOUBAN=7200
 
       # ============ ① pansou-edge 网盘聚合搜索（可选） ============
-      # 填写你自建的 Cloudflare Worker 地址，留空则用内置公开节点
-      # 也可以在网页「系统设置」里填写，网页配置优先级更高
+      # 填写你自建的 pansou / pansou-edge 地址，留空则用内置公开节点。
+      # 支持多个地址（英文逗号分隔），并行竞速、互为兜底，任一可用即不会搜不到。
+      # 同机容器可写容器名，例如：http://pansou-app:80,https://xxx.workers.dev
+      #
+      # ⚠️ 注意：网页「系统设置」里保存的值优先级更高，会覆盖这里。
+      #    若出现「网盘搜不到」，先去网页点一下「测试连接」排查。
       - ENABLE_PANSOU_EDGE=true
       - PANSOU_EDGE_URL=
       - PANSOU_EDGE_TOKEN=
